@@ -7,57 +7,28 @@ using System.Threading.Tasks;
 using System.Web;
 
 namespace Jusfr.Caching {
-    internal class HttpContextCacheProvider : ICacheProvider {
-        protected virtual String BuildCacheKey(String key) {
-            return String.Concat("HttpContextCacheProvider_", key);
+    public class HttpContextCacheProvider : CacheProvider, ICacheProvider {
+        private const String _prefix = "HttpContextCacheProvider_";
+        protected override String BuildCacheKey(String key) {
+            return String.Concat(_prefix, key);
         }
 
-        public Boolean TryGet<T>(String key, out T value) {
-            key = BuildCacheKey(key);
+        protected override Boolean InnerTryGet(String key, out Object entry) {
             Boolean exist = false;
+            entry = null;
             if (HttpContext.Current.Items.Contains(key)) {
                 exist = true;
-                Object entry = HttpContext.Current.Items[key];
-                if (entry != null && !(entry is T)) {
-                    throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
-                        key, entry.GetType().FullName, typeof(T).FullName));
-                }
-                value = (T)entry;
-            }
-            else {
-                value = default(T);
+                entry = HttpContext.Current.Items[key];
             }
             return exist;
         }
 
-        public T GetOrCreate<T>(String key, Func<T> function) {
-            T value;
-            if (TryGet(key, out value)) {
-                return value;
-            }
-            value = function();
-            Overwrite(key, value);
-            return value;
+        public override void Overwrite<T>(String key, T entry) {
+            HttpContext.Current.Items[BuildCacheKey(key)] = entry;
         }
 
-        public T GetOrCreate<T>(String key, Func<String, T> factory) {
-            T value;
-            if (TryGet(key, out value)) {
-                return value;
-            }
-            value = factory(key);
-            Overwrite(key, value);
-            return value;
-        }
-
-        public void Overwrite<T>(String key, T value) {
-            key = BuildCacheKey(key);
-            HttpContext.Current.Items[key] = value;
-        }
-
-        public void Expire(String key) {
-            key = BuildCacheKey(key);
-            HttpContext.Current.Items.Remove(key);
+        public override void Expire(String key) {
+            HttpContext.Current.Items.Remove(BuildCacheKey(key));
         }
     }
 }

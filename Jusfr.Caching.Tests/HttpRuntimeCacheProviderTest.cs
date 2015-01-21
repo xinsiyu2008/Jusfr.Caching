@@ -1,9 +1,8 @@
-﻿using System;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 using System.Threading;
-using Jusfr.Caching;
 
-namespace Jusfr.Tests.Infrastructure.Caching {
+namespace Jusfr.Caching.Tests {
     [TestClass]
     public class HttpRuntimeCacheProviderTest {
         [TestMethod]
@@ -51,19 +50,14 @@ namespace Jusfr.Tests.Infrastructure.Caching {
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(2D));
             Assert.AreEqual(result, val);
 
-            for (int i = 0; i < 3; i++) {
-                Thread.Sleep(1000);
-                var exist = cacheProvider.TryGet<Guid>(key, out val);
-                Assert.IsTrue(exist);
-                Assert.AreEqual(result, val);
-            }
+            var exist = cacheProvider.TryGet<Guid>(key, out val);
+            Assert.IsTrue(exist);
+            Assert.AreEqual(result, val);
 
-            {
-                Thread.Sleep(2000);
-                var exist = cacheProvider.TryGet<Guid>(key, out val);
-                Assert.IsFalse(exist);
-                Assert.AreEqual(val, Guid.Empty);
-            }
+            Thread.Sleep(4000);
+            exist = cacheProvider.TryGet<Guid>(key, out val);
+            Assert.IsFalse(exist);
+            Assert.AreEqual(val, Guid.Empty);
         }
 
         [TestMethod]
@@ -113,7 +107,7 @@ namespace Jusfr.Tests.Infrastructure.Caching {
             Assert.AreEqual(result, val);
 
             var val2 = Guid.NewGuid();
-            cacheProvider.Overwrite<Guid>(key, val2, TimeSpan.FromSeconds(2D));
+            cacheProvider.Overwrite<Guid>(key, val2, TimeSpan.FromSeconds(1D));
 
             Thread.Sleep(2000);
             Guid val3;
@@ -133,7 +127,7 @@ namespace Jusfr.Tests.Infrastructure.Caching {
             Assert.AreEqual(result, val);
 
             var val2 = Guid.NewGuid();
-            cacheProvider.Overwrite<Guid>(key, val2, DateTime.UtcNow.AddSeconds(2D));
+            cacheProvider.Overwrite<Guid>(key, val2, DateTime.UtcNow.AddSeconds(1D));
 
             Thread.Sleep(2000);
             Guid val3;
@@ -164,10 +158,11 @@ namespace Jusfr.Tests.Infrastructure.Caching {
             var key = Guid.NewGuid().ToString();
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
+            HttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
-            Assert.IsTrue(cacheProvider.Count > 0);
+            Assert.IsTrue(cacheProvider.Count() > 0);
+
 
             cacheProvider.ExpireAll();
             Guid val2;
@@ -175,7 +170,7 @@ namespace Jusfr.Tests.Infrastructure.Caching {
             Assert.IsFalse(exist);
             Assert.AreEqual(val2, Guid.Empty);
 
-            Assert.IsTrue(cacheProvider.Count == 0);
+            Assert.IsTrue(cacheProvider.Count() == 0);
         }
     }
 }

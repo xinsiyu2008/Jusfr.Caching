@@ -9,73 +9,39 @@ using System.Web;
 using System.Web.Caching;
 
 namespace Jusfr.Caching {
-    internal class HttpRuntimeCacheProvider : IHttpRuntimeCacheProvider {
-        private static readonly Object _sync = new Object();
+    public class HttpRuntimeCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion {
         private static readonly Object _nullEntry = new Object();
-        private Boolean _supportNull = true;
+        private String _prefix = "HttpRuntimeCacheProvider_";
 
-        public HttpRuntimeCacheProvider(Boolean supportNull = true) {
-            _supportNull = supportNull;
+        public virtual String Region { get; private set; }
+
+        public HttpRuntimeCacheProvider() {
         }
 
-        protected virtual String BuildCacheKey(String key) {
-            return String.Concat("HttpRuntimeCacheProvider_", key);
+        public HttpRuntimeCacheProvider(String region) {
+            Region = region;
         }
 
-        protected virtual Object BuildCacheEntry<T>(T value) {
+        protected override bool InnerTryGet(String key, out object entry) {
+            entry = HttpRuntime.Cache.Get(key);
+            return entry != null;
+        }
+
+        protected override String BuildCacheKey(String key) {
+            //Region 为空将被当作  String.Empty 处理
+            return Region == null
+                ? String.Concat(_prefix, key)
+                : String.Concat(_prefix, Region, key);
+        }
+
+        private Object BuildCacheEntry<T>(T value) {
             Object entry = value;
             if (value == null) {
-                if (_supportNull) {
-                    entry = _nullEntry;
-                }
-                else {
-                    throw new InvalidOperationException(String.Format("Null cache item not supported, try ctor with paramter 'supportNull = true' "));
-                }
+                entry = _nullEntry;
             }
             return entry;
         }
 
-        public Boolean TryGet<T>(String key, out T value) {
-            Object entry = HttpRuntime.Cache.Get(BuildCacheKey(key));
-            Boolean exist = false;
-            if (entry != null) {
-                exist = true;
-                if (!(entry is T)) {
-                    if (_supportNull && !(entry == _nullEntry)) {
-                        throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
-                            key, entry.GetType().FullName, typeof(T).FullName));
-                    }
-                    value = (T)((Object)null);
-                }
-                else {
-                    value = (T)entry;
-                }
-            }
-            else {
-                value = default(T);
-            }
-            return exist;
-        }
-
-        public T GetOrCreate<T>(String key, Func<String, T> factory) {
-            T value;
-            if (TryGet<T>(key, out value)) {
-                return value;
-            }
-            value = factory(key);
-            Overwrite(key, value);
-            return value;
-        }
-
-        public T GetOrCreate<T>(String key, Func<T> function) {
-            T value;
-            if (TryGet<T>(key, out value)) {
-                return value;
-            }
-            value = function();
-            Overwrite(key, value);
-            return value;
-        }
 
         public T GetOrCreate<T>(String key, Func<T> function, TimeSpan slidingExpiration) {
             T value;
@@ -83,16 +49,6 @@ namespace Jusfr.Caching {
                 return value;
             }
             value = function();
-            Overwrite(key, value, slidingExpiration);
-            return value;
-        }
-
-        public T GetOrCreate<T>(String key, Func<String, T> factory, TimeSpan slidingExpiration) {
-            T value;
-            if (TryGet<T>(key, out value)) {
-                return value;
-            }
-            value = factory(key);
             Overwrite(key, value, slidingExpiration);
             return value;
         }
@@ -107,17 +63,7 @@ namespace Jusfr.Caching {
             return value;
         }
 
-        public T GetOrCreate<T>(String key, Func<String, T> factory, DateTime absoluteExpiration) {
-            T value;
-            if (TryGet<T>(key, out value)) {
-                return value;
-            }
-            value = factory(key);
-            Overwrite(key, value, absoluteExpiration);
-            return value;
-        }
-
-        public void Overwrite<T>(String key, T value) {
+        public override void Overwrite<T>(String key, T value) {
             HttpRuntime.Cache.Insert(BuildCacheKey(key), BuildCacheEntry<T>(value));
         }
 
@@ -133,48 +79,12 @@ namespace Jusfr.Caching {
                 absoluteExpiration, Cache.NoSlidingExpiration);
         }
 
-        public void Expire(String key) {
+        public override void Expire(String key) {
             HttpRuntime.Cache.Remove(BuildCacheKey(key));
         }
 
-        protected virtual Boolean Hit(DictionaryEntry entry) {
-            return (entry.Key is String) && ((String)entry.Key).StartsWith("HttpRuntimeCacheProvider_");
-        }
-
-        //todo: lock 的必要性?
-        public void ExpireAll() {
-            lock (_sync) {
-                var entries = HttpRuntime.Cache.OfType<DictionaryEntry>().Where(Hit);
-                foreach (var entry in entries) {
-                    HttpRuntime.Cache.Remove((String)entry.Key);
-                }
-            }
-        }
-
-        public Int32 Count {
-            get {
-                lock (_sync) {
-                    return HttpRuntime.Cache.OfType<DictionaryEntry>().Where(Hit).Count();
-                }
-            }
-        }
-
-        public String Dump() {
-            var builder = new StringBuilder(1024);
-            builder.AppendLine("--------------------HttpRuntimeCacheProvider.Dump--------------------------");
-            builder.AppendFormat("EffectivePercentagePhysicalMemoryLimit: {0}\r\n", HttpRuntime.Cache.EffectivePercentagePhysicalMemoryLimit);
-            builder.AppendFormat("EffectivePrivateBytesLimit: {0}\r\n", HttpRuntime.Cache.EffectivePrivateBytesLimit);
-            builder.AppendFormat("Count: {0}\r\n", HttpRuntime.Cache.Count);
-            builder.AppendLine();
-            lock (_sync) {
-                var entries = HttpRuntime.Cache.OfType<DictionaryEntry>().Where(Hit).OrderBy(de => de.Key);
-                foreach (var entry in entries) {
-                    builder.AppendFormat("{0}\r\n    {1}\r\n", entry.Key, entry.Value.GetType().FullName);
-                }
-            }
-            builder.AppendLine("--------------------HttpRuntimeCacheProvider.Dump--------------------------");
-            Debug.WriteLine(builder.ToString());
-            return builder.ToString();
+        internal Boolean Hit(DictionaryEntry entry) {
+            return (entry.Key is String) && ((String)entry.Key).StartsWith(BuildCacheKey(String.Empty));
         }
     }
 }

@@ -1,9 +1,8 @@
-﻿using System;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 using System.Web;
-using Jusfr.Caching;
 
-namespace Jusfr.Tests.Infrastructure.Caching {
+namespace Jusfr.Caching.Tests {
     [TestClass]
     public class HttpContextCacheProviderTest {
         [TestInitialize]
@@ -53,7 +52,7 @@ namespace Jusfr.Tests.Infrastructure.Caching {
 
         [TestMethod]
         public void ReferenceTypeValueChangeToNull() {
-            var key = "key-object_null";
+            var key = "key-object-null";
             ICacheProvider cache = CacheProviderFactory.GetHttpContextCache();
             var id1 = new Object();
             var id2 = cache.GetOrCreate(key, () => id1);

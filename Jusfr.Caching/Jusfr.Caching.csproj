@@ -40,14 +40,14 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CacheProvider.cs" />
     <Compile Include="CacheProviderFactory.cs" />
     <Compile Include="HttpContextCacheProvider.cs" />
     <Compile Include="HttpRuntimeCacheProvider.cs" />
-    <Compile Include="HttpRuntimeRegionCacheProvider.cs" />
+    <Compile Include="HttpRuntimeCacheProviderExtensions.cs" />
     <Compile Include="ICacheProvider.cs" />
     <Compile Include="IHttpRuntimeCacheProvider.cs" />
-    <Compile Include="IHttpRuntimeRegionCacheProvider.cs" />
-    <Compile Include="NullableItem.cs" />
+    <Compile Include="IRegion.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

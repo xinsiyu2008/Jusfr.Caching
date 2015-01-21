@@ -3,7 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Enyim.Caching;
 using Enyim.Caching.Memcached;
 
-namespace Jusfr.Tests.Infrastructure.Caching {
+namespace Jusfr.Caching.Tests {
     [TestClass]
     public class MemcachedTest {
         [TestMethod]

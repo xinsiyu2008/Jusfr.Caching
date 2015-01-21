@@ -17,22 +17,33 @@ namespace Jusfr.Caching {
 
 //#if DEBUG
         public static IHttpRuntimeCacheProvider GetHttpRuntimeCache() {
-            return new HttpRuntimeCacheProvider(true);
+            return new HttpRuntimeCacheProvider();
         }
 
-        public static IHttpRuntimeRegionCacheProvider GetHttpRuntimeCache(String region) {
-            return new HttpRuntimeRegionCacheProvider(region, true);
+        public static IHttpRuntimeCacheProvider GetHttpRuntimeCache(String region) {
+            return new HttpRuntimeCacheProvider(region);
         }
-          
+
         //开发环境，退化成 进程Cache
         public static IHttpRuntimeCacheProvider GetDistributedCache() {
-            return new HttpRuntimeCacheProvider(true);
+            return new HttpRuntimeCacheProvider();
         }
 
-        public static IHttpRuntimeRegionCacheProvider GetDistributedCache(String region) {
-            return new HttpRuntimeRegionCacheProvider(region, true);
+        public static IHttpRuntimeCacheProvider GetDistributedCache(String region) {
+            return new HttpRuntimeCacheProvider(region);
         }
 
+
+//#else
+//        //正式环境，使用 Memcached
+//        public static IHttpRuntimeCacheProvider GetDistributedCache() {
+//            return new MemcachedCacheProvider();
+//        }
+
+//        public static IHttpRuntimeCacheProvider GetDistributedCache(String region) {
+//            return new MemcachedCacheProvider(region);
+//        }
+//#endif
 
         public static String Dump() {
             var builder = new StringBuilder(1024);
@@ -49,16 +60,5 @@ namespace Jusfr.Caching {
             Debug.WriteLine(builder.ToString());
             return builder.ToString();
         }
-
-//#else
-//        //正式环境，使用 Memcached
-//        public static IHttpRuntimeCacheProvider GetDistributedCache() {
-//            return new MemcachedCacheProvider();
-//        }
-
-//        public static IHttpRuntimeRegionCacheProvider GetDistributedCache(String region) {
-//            return new MemcachedCacheProvider(region);
-//        }
-//#endif
     }
 }

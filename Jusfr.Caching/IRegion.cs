@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Jusfr.Caching {
-    public interface IHttpRuntimeRegionCacheProvider : IHttpRuntimeCacheProvider {
+    public interface IRegion {
         String Region { get; }
     }
 }

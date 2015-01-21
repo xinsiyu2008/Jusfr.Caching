@@ -1,15 +1,14 @@
-﻿using System;
+﻿using Jusfr.Caching.Memcached;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Jusfr.Caching;
-using Jusfr.Caching.Memcached;
+using System;
 using System.Threading;
 
-namespace Jusfr.Tests.Infrastructure.Caching {
+namespace Jusfr.Caching.Tests {
     [TestClass]
     public class MemcachedCacheProviderTest {
         [TestMethod]
-        public void TryGet() {
-            var key = Guid.NewGuid().ToString();
+        public void TryGetTest() {
+            var key = "TryGetTest";
             Guid val;
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
@@ -17,11 +16,16 @@ namespace Jusfr.Tests.Infrastructure.Caching {
             Assert.IsFalse(exist);
             Assert.AreEqual(val, Guid.Empty);
 
+            var val2 = Guid.NewGuid();
+            cacheProvider.Overwrite(key, val2);
+            exist = cacheProvider.TryGet<Guid>(key, out val);
+            Assert.IsTrue(exist);
+            Assert.AreEqual(val, val2);
         }
 
         [TestMethod]
-        public void GetOrCreate() {
-            var key = Guid.NewGuid().ToString();
+        public void GetOrCreateTest() {
+            var key = "GetOrCreateTest";
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
@@ -44,46 +48,47 @@ namespace Jusfr.Tests.Infrastructure.Caching {
         }
 
         [TestMethod]
-        public void GetOrCreateWithslidingExpiration() {
-            var key = Guid.NewGuid().ToString();
+        public void GetOrCreateWithslidingExpirationTest() {
+            var key = "GetOrCreateWithslidingExpirationTest";
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(2D));
+            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(4D));
             Assert.AreEqual(result, val);
 
             var exist = cacheProvider.TryGet<Guid>(key, out val);
             Assert.IsTrue(exist);
             Assert.AreEqual(result, val);
 
-            Thread.Sleep(4000);
+            Thread.Sleep(TimeSpan.FromSeconds(8D));
             exist = cacheProvider.TryGet<Guid>(key, out val);
             Assert.IsFalse(exist);
             Assert.AreEqual(val, Guid.Empty);
         }
 
         [TestMethod]
-        public void GetOrCreateWithAbsoluteExpiration() {
-            var key = Guid.NewGuid().ToString();
+        public void GetOrCreateWithAbsoluteExpirationTest() {
+            var key = "GetOrCreateWithAbsoluteExpirationTest";
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, DateTime.UtcNow.AddSeconds(2D));
+            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, DateTime.UtcNow.AddSeconds(4D));
             Assert.AreEqual(result, val);
 
             var exist = cacheProvider.TryGet<Guid>(key, out val);
             Assert.IsTrue(exist);
             Assert.AreEqual(result, val);
 
-            Thread.Sleep(TimeSpan.FromSeconds(4D));
+            //注意服务器时间与本地时间的误差
+            Thread.Sleep(TimeSpan.FromSeconds(8D));
             exist = cacheProvider.TryGet<Guid>(key, out val);
             Assert.IsFalse(exist);
             Assert.AreEqual(val, Guid.Empty);
         }
 
         [TestMethod]
-        public void Overwrite() {
-            var key = Guid.NewGuid().ToString();
+        public void OverwriteTest() {
+            var key = "OverwriteTest";
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
@@ -100,59 +105,69 @@ namespace Jusfr.Tests.Infrastructure.Caching {
         }
 
         [TestMethod]
-        public void OverwriteWithslidingExpiration() {
-            var key = Guid.NewGuid().ToString();
+        public void OverwriteWithslidingExpirationTest() {
+            var key = "OverwriteWithslidingExpirationTest";
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
-            var val2 = Guid.NewGuid();
-            cacheProvider.Overwrite<Guid>(key, val2, TimeSpan.FromSeconds(2D));
+            var exist = cacheProvider.TryGet<Guid>(key, out val);
+            Assert.IsTrue(exist);
 
-            Thread.Sleep(4000);
+            var val2 = Guid.NewGuid();
+            cacheProvider.Overwrite<Guid>(key, val2, TimeSpan.FromSeconds(4D));
+
+            Thread.Sleep(TimeSpan.FromSeconds(8D));
             Guid val3;
-            var exist = cacheProvider.TryGet<Guid>(key, out val3);
+            exist = cacheProvider.TryGet<Guid>(key, out val3);
             Assert.IsFalse(exist);
             Assert.AreEqual(val3, Guid.Empty);
 
         }
 
         [TestMethod]
-        public void OverwriteWithAbsoluteExpiration() {
-            var key = Guid.NewGuid().ToString();
+        public void OverwriteWithAbsoluteExpirationTest() {
+            var key = "OverwriteWithAbsoluteExpirationTest";
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
-            var val2 = Guid.NewGuid();
-            cacheProvider.Overwrite<Guid>(key, val2, DateTime.UtcNow.AddSeconds(2D));
+            var exist = cacheProvider.TryGet<Guid>(key, out val);
+            Assert.IsTrue(exist);
 
-            Thread.Sleep(4000);
+            var val2 = Guid.NewGuid();
+            cacheProvider.Overwrite<Guid>(key, val2, DateTime.UtcNow.AddSeconds(4D));
+
+            Thread.Sleep(TimeSpan.FromSeconds(8D));
             Guid val3;
-            var exist = cacheProvider.TryGet<Guid>(key, out val3);
+            exist = cacheProvider.TryGet<Guid>(key, out val3);
             Assert.IsFalse(exist);
             Assert.AreEqual(val3, Guid.Empty);
 
         }
 
         [TestMethod]
-        public void Expire() {
-            var key = Guid.NewGuid().ToString();
+        public void ExpireTest() {
+            var key = "ExpireTest";
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
+
+            var exist = cacheProvider.TryGet<Guid>(key, out val);
+            Assert.IsTrue(exist);
 
             cacheProvider.Expire(key);
             Guid val2;
-            var exist = cacheProvider.TryGet<Guid>(key, out val2);
+            exist = cacheProvider.TryGet<Guid>(key, out val2);
             Assert.IsFalse(exist);
             Assert.AreEqual(val2, Guid.Empty);
         }
     }
 }
+
