@@ -1,0 +1,593 @@
+﻿一步步实现一个基本的缓存模块
+    1. 前言
+    2.  请求级别缓存
+    2.1 多线程
+    3.  进程级别缓存
+    3.1 分区与计数
+    3.2 可空缓存值
+    3.3 封装与集成
+    4.  小结
+
+1. 前言
+·面向读者：初、中级用户；
+·涉及知识：HttpRuime.Cache、DictionaryEntry、UML、Unit Test等；
+·文章目的：这里的内容不会涉及 Memcached、Redies 等进程外缓存的使用，只针对包含WEB应用的常见场景，实现一个具有线程安全、分区、过期特性的缓存模块，略微提及DI等内容。
+jusfr 原创，转载请注明来自博客园 http://www.cnblogs.com/Jusfr/ 。
+
+2.  请求级别缓存
+如果需要线程安全地存取数据，System.Collections.Concurrent 命名空间下的像 ConcurrentDictionary 等实现是首选；更复杂的特性像过期策略、文件依赖等就需要其他实现了。ASP.NET中的HttpContext.Current.Items 常常被用作自定义数据窗口，注入工具像Unity、Autofac 等便借助自定义 HttpModule 将容器挂接在 HttpContext.Current 上以进行生命周期管理。
+基本接口 ICacheProvider，请求级别的缓存从它定义，考虑到请求级别缓存的运用场景有限，故只定义有限特性；
+
+    public interface ICacheProvider {
+        Boolean TryGet<T>(String key, out T value);
+        T GetOrCreate<T>(String key, Func<T> function);
+        T GetOrCreate<T>(String key, Func<String, T> factory);
+        void Overwrite<T>(String key, T value);
+        void Expire(String key);
+    }
+
+HttpContext.Current.Items 从 IDictionary 定义，存储 Object-Object 键值对，出于便利与直观，ICacheProvider 只接受String类型缓存键，故HttpContextCacheProvider内部使用 BuildCacheKey(String key) 方法生成真正缓存键以避免键值重复；
+同时 HashTable 可以存储空引用作为缓存值，故 TryGet() 方法先进行 Contains() 判断存在与否，再进行类型判断，避免缓存键重复使用；
+
+    public class HttpContextCacheProvider : ICacheProvider {
+        protected virtual String BuildCacheKey(String key) {
+            return String.Concat("HttpContextCacheProvider_", key);
+        }
+
+        public Boolean TryGet<T>(String key, out T value) {
+            key = BuildCacheKey(key);
+            Boolean exist = false;
+            if (HttpContext.Current.Items.Contains(key)) {
+                exist = true;
+                Object entry = HttpContext.Current.Items[key];
+                if (entry != null && !(entry is T)) {
+                    throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
+                        key, entry.GetType().FullName, typeof(T).FullName));
+                }
+                value = (T)entry;
+            }
+            else {
+                value = default(T);
+            }
+            return exist;
+        }
+
+        public T GetOrCreate<T>(String key, Func<T> function) {
+            T value;
+            if (TryGet(key, out value)) {
+                return value;
+            }
+            value = function();
+            Overwrite(key, value);
+            return value;
+        }
+
+        public T GetOrCreate<T>(String key, Func<String, T> factory) {
+            T value;
+            if (TryGet(key, out value)) {
+                return value;
+            }
+            value = factory(key);
+            Overwrite(key, value);
+            return value;
+        }
+
+        public void Overwrite<T>(String key, T value) {
+            key = BuildCacheKey(key);
+            HttpContext.Current.Items[key] = value;
+        }
+
+        public void Expire(String key) {
+            key = BuildCacheKey(key);
+            HttpContext.Current.Items.Remove(key);
+        }
+    }
+
+这里使用了 Func<T> 委托的运用，合并查询、判断和添加缓存项的操作以简化接口调用；
+如果用户期望不同类型缓存值可以存储到相同的 key 上，则需要重新定义 BuildCacheKey() 方法将缓存值类型作为参数参与生成缓存键，此时 Expire() 方法则同样需要了。
+测试用例：
+
+    [TestClass]
+    public class HttpContextCacheProviderTest {
+        [TestInitialize]
+        public void Initialize() {
+            HttpContext.Current = new HttpContext(new HttpRequest(null, "http://localhost", null), new HttpResponse(null));
+        }
+
+        [TestMethod]
+        public void NullValue() {
+            var key = "key-null";
+            HttpContext.Current.Items.Add(key, null);
+            Assert.IsTrue(HttpContext.Current.Items.Contains(key));
+            Assert.IsNull(HttpContext.Current.Items[key]);
+        }
+
+        [TestMethod]
+        public void ValueType() {
+            var key = "key-guid";
+            ICacheProvider cache = new HttpContextCacheProvider();
+            var id1 = Guid.NewGuid();
+            var id2 = cache.GetOrCreate(key, () => id1);
+            Assert.AreEqual(id1, id2);
+
+            cache.Expire(key);
+            Guid id3;
+            var exist = cache.TryGet(key, out id3);
+            Assert.IsFalse(exist);
+            Assert.AreNotEqual(id1, id3);
+            Assert.AreEqual(id3, Guid.Empty);
+        }
+    }
+
+引用类型测试用例忽略。
+2.1 多线程
+异步等情况下，HttpContext.Current并非无处不在 http://www.cnblogs.com/fish-li/archive/2013/04/06/3002940.html ，故异步等情况下 HttpContextCacheProvider 的使用可能抛出空引用异常，需要被处理；
+对此园友有过思考 http://www.cnblogs.com/ljzforever/p/3142782.html ，这里贴上A大的方案 http://www.cnblogs.com/artech/archive/2010/02/25/1673792.html ，有需求的读者请按图索骥。
+
+3.  进程级别缓存
+HttpRuntime.Cache 定义在 System.Web.dll 中，System.Web 命名空间下，实际上是可以使用在非 Asp.Net 应用里的；另外 HttpContext 对象包含一个 Cache 属性，它们的关系可以阅读 HttpContext.Cache 和 HttpRuntime.Cache http://www.cnblogs.com/tonyman/archive/2007/09/06/884574.html；
+HttpRuntime.Cache 为 System.Web.Caching.Cache 类型，支持滑动/绝对时间过期策略、支持缓存优先级、缓存更新/过期回调、基于文件的缓存依赖项等，功能十分强大，这里借用少数特性来实现进程级别缓存，更多文档请自行检索。
+从 ICacheProvider 定义 IHttpRuntimeCacheProvider，添加相对过期与绝对过期、添加批量的缓存过期接口 ExpireAll()；
+
+    public interface IHttpRuntimeCacheProvider : ICacheProvider {
+        T GetOrCreate<T>(String key, Func<T> function, TimeSpan slidingExpiration);
+        T GetOrCreate<T>(String key, Func<T> function, DateTime absoluteExpiration);
+        void Overwrite<T>(String key, T value, TimeSpan slidingExpiration);
+        void Overwrite<T>(String key, T value, DateTime absoluteExpiration);
+        void ExpireAll();
+    }
+
+System.Web.Caching.Cache 只继承 IEnumerable，内部使用 DictionaryEntry 存储Object-Object 键值对，但 HttpRuntime.Cache 只授受字符串类型缓存键及非空缓存值，关于空引用缓存值的问题，我们在3.2中讨论；
+故在 TryGet() 与 HttpContextCacheProvider.TryGet() 具有显著差异，前者需要拿出值来进行非空判断，后者则是使用 IDictionary.Contains() 方法；
+除了 TryGet() 方法与过期过期参数外的差异外，接口实现与 HttpContextCacheProvider 类似；
+
+    public class HttpRuntimeCacheProvider : IHttpRuntimeCacheProvider {
+        private static readonly Object _sync = new Object();
+        
+        protected virtual String BuildCacheKey(String key) {
+            return String.Concat("HttpRuntimeCacheProvider_", key);
+        }
+
+        public Boolean TryGet<T>(String key, out T value) {
+            key = BuildCacheKey(key);
+            Boolean exist = false;
+            Object entry = HttpRuntime.Cache.Get(key);
+            if (entry != null) {
+                exist = true;
+                if (!(entry is T)) {
+                    throw new InvalidOperationException(String.Format("缓存项[{0}]类型错误, {1} or {2} ?",
+                        key, entry.GetType().FullName, typeof(T).FullName));
+                }
+                value = (T)entry;
+            }
+            else {
+                value = default(T);
+            }
+            return exist;
+        }
+
+        public T GetOrCreate<T>(String key, Func<String, T> factory) {
+            T result;
+            if (TryGet<T>(key, out result)) {
+                return result;
+            }
+            result = factory(key);
+            Overwrite(key, result);
+            return result;
+        }
+
+        public T GetOrCreate<T>(String key, Func<T> function) {
+            T result;
+            if (TryGet<T>(key, out result)) {
+                return result;
+            }
+            result = function();
+            Overwrite(key, result);
+            return result;
+        }
+
+
+        public T GetOrCreate<T>(String key, Func<T> function, TimeSpan slidingExpiration) {
+            T result;
+            if (TryGet<T>(key, out result)) {
+                return result;
+            }
+            result = function();
+            Overwrite(key, result, slidingExpiration);
+            return result;
+        }
+
+        public T GetOrCreate<T>(String key, Func<T> function, DateTime absoluteExpiration) {
+            T result;
+            if (TryGet<T>(key, out result)) {
+                return result;
+            }
+            result = function();
+            Overwrite(key, result, absoluteExpiration);
+            return result;
+        }
+
+        public void Overwrite<T>(String key, T value) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), value);
+        }
+
+        //slidingExpiration 时间内无访问则过期
+        public void Overwrite<T>(String key, T value, TimeSpan slidingExpiration) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), value, null,
+                Cache.NoAbsoluteExpiration, slidingExpiration);
+        }
+
+        //absoluteExpiration 绝对时间过期
+        public void Overwrite<T>(String key, T value, DateTime absoluteExpiration) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), value, null,
+                absoluteExpiration, Cache.NoSlidingExpiration);
+        }
+
+        public void Expire(String key) {
+            HttpRuntime.Cache.Remove(BuildCacheKey(key));
+        }
+        
+        public void ExpireAll() {
+            lock (_sync) {
+                var entries = HttpRuntime.Cache.OfType<DictionaryEntry>()
+                    .Where(entry => (entry.Key is String) && ((String)entry.Key).StartsWith("HttpRuntimeCacheProvider_"));
+                foreach (var entry in entries) {
+                    HttpRuntime.Cache.Remove((String)entry.Key);
+                }
+            }
+        }
+    }
+
+测试用例与 HttpContextCacheProviderTest 类似，这里贴出缓存过期的测试：
+
+    public class HttpRuntimeCacheProviderTest {
+        [TestMethod]
+        public void GetOrCreateWithAbsoluteExpirationTest() {
+            var key = Guid.NewGuid().ToString();
+            var val = Guid.NewGuid();
+
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
+            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, DateTime.UtcNow.AddSeconds(2D));
+            Assert.AreEqual(result, val);
+
+            var exist = cacheProvider.TryGet<Guid>(key, out val);
+            Assert.IsTrue(exist);
+            Assert.AreEqual(result, val);
+
+            Thread.Sleep(2000);
+            exist = cacheProvider.TryGet<Guid>(key, out val);
+            Assert.IsFalse(exist);
+            Assert.AreEqual(val, Guid.Empty);
+        }
+
+        [TestMethod]
+        public void ExpireAllTest() {
+            var key = Guid.NewGuid().ToString();
+            var val = Guid.NewGuid();
+
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
+            var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
+            Assert.AreEqual(result, val);
+
+            cacheProvider.ExpireAll();
+            Guid val2;
+            var exist = cacheProvider.TryGet<Guid>(key, out val2);
+            Assert.IsFalse(exist);
+            Assert.AreEqual(val2, Guid.Empty);
+        }
+    }
+
+3.1 分区与计数
+缓存分区是常见需求，缓存用户A、用户B的认证信息可以拿用户标识作为缓存键，但每个用户分别有一整套包含授权的其他数据时，为创建以用户分区的缓存应该是更好的选择；
+常规的想法是为缓存添加类似 `Region` 或 `Partition`的参数，个人觉得这不是很好的实践，因为接口被修改，同时过多的参数非常让人困惑；
+读者可能对前文中 BuildCacheKey() 方法被 protected virtual 修饰觉得很奇怪，是的，个人觉得定义新的接口，配合从缓存Key的生成算法作文章来分区貌似比较巧妙，也迎合依赖注册被被广泛使用的现状；
+分区的进程级别缓存定义，只需多出一个属性：
+
+    public interface IHttpRuntimeRegionCacheProvider : IHttpRuntimeCacheProvider {
+        String Region { get; }
+    }
+
+分区的缓存实现，先为 IHttpRuntimeCacheProvider 添加计数，然后重构HttpRuntimeCacheProvider，提取出过滤算法，接着重写 BuildCacheKey() 方法的实现，使不同分区的生成不同的缓存键，缓存项操作方法无须修改；
+    public interface IHttpRuntimeCacheProvider : ICacheProvider {
+        ...
+        Int32 Count { get; }
+    }
+     
+     public class HttpRuntimeCacheProvider : IHttpRuntimeCacheProvider {
+        ...
+        protected virtual Boolean Hit(DictionaryEntry entry) {
+            return (entry.Key is String) && ((String)entry.Key).StartsWith("HttpRuntimeCacheProvider_");
+        }
+
+        public void ExpireAll() {
+            lock (_sync) {
+                var entries = HttpRuntime.Cache.OfType<DictionaryEntry>().Where(Hit);
+                foreach (var entry in entries) {
+                    HttpRuntime.Cache.Remove((String)entry.Key);
+                }
+            }
+        }
+
+        public Int32 Count {
+            get {
+                lock (_sync) {
+                    return HttpRuntime.Cache.OfType<DictionaryEntry>().Where(Hit).Count();
+                }
+            }
+        }
+    }
+
+    public class HttpRuntimeRegionCacheProvider : HttpRuntimeCacheProvider, IHttpRuntimeRegionCacheProvider {
+        private String _prefix;
+        public virtual String Region { get; private set; }
+
+        private String GetPrifix() {
+            if (_prefix == null) {
+                _prefix = String.Concat("HttpRuntimeRegionCacheProvider_", Region, "_");
+            }
+            return _prefix;
+        }
+
+        public HttpRuntimeRegionCacheProvider(String region)  {
+            Region = region;
+        }
+
+        protected override String BuildCacheKey(String key) {
+            //Region 为空将被当作  String.Empty 处理
+            return String.Concat(GetPrifix(), base.BuildCacheKey(key));
+        }
+
+        protected override Boolean Hit(DictionaryEntry entry) {
+            return (entry.Key is String) && ((String)entry.Key).StartsWith(GetPrifix());
+        }
+    }
+
+测试用例示例了两个分区缓存对相同 key 的操作：
+
+    [TestClass]
+    public class HttpRuntimeRegionCacheProviderTest {
+        [TestMethod]
+        public void ValueType() {
+            var key = "key-guid";
+            IHttpRuntimeCacheProvider cache1 = new HttpRuntimeRegionCacheProvider("Region1");
+            var id1 = cache1.GetOrCreate(key, Guid.NewGuid);
+
+            IHttpRuntimeCacheProvider cache2 = new HttpRuntimeRegionCacheProvider("Region2");
+            var id2 = cache2.GetOrCreate(key, Guid.NewGuid);
+            Assert.AreNotEqual(id1, id2);
+
+            cache1.ExpireAll();
+            Assert.AreEqual(cache1.Count, 0);
+            Assert.AreEqual(cache2.Count, 1);
+        }
+    }
+
+    至此一个基本的缓存模块已经完成；
+
+3.2 可空缓存值
+前文提及过，HttpRuntime.Cache 不授受空引用作为缓存值，与 HttpContext.Current.Items表现不同，另一方面实际需求中，空值作为字典的值仍然是有意义，此处给出一个支持空缓存值的实现；
+HttpRuntime.Cache断然是不能把 null 存入的，查看 HttpRuntimeCacheProvider.TryGet() 方法，可知 HttpRuntime.Cache.Get() 获取的总是 Object 类型，思路可以这样展开：
+1) 添加缓存时进行判断，如果非空，常规处理，否则把用一个特定的自定义对象存入；
+2) 取出缓存时进行判断，如果为特定的自定义对象，返回 null；
+
+为 HttpRuntimeCacheProvider 的构造函数添加可选参数，TryGet() 加入 null 判断逻辑；添加方法 BuildCacheEntry()，替换空的缓存值为 _nullEntry，其他方法不变；
+
+    public class HttpRuntimeCacheProvider : IHttpRuntimeCacheProvider {
+        private static readonly Object _sync = new Object();
+        private static readonly Object _nullEntry = new Object();
+        private Boolean _supportNull;
+
+        public HttpRuntimeCacheProvider(Boolean supportNull = false) {
+            _supportNull = supportNull;
+        }
+
+        protected virtual String BuildCacheKey(String key) {
+            return String.Concat("HttpRuntimeCacheProvider_", key);
+        }
+
+        protected virtual Object BuildCacheEntry<T>(T value) {
+            Object entry = value;
+            if (value == null) {
+                if (_supportNull) {
+                    entry = _nullEntry;
+                }
+                else {
+                    throw new InvalidOperationException(String.Format("Null cache item not supported, try ctor with paramter 'supportNull = true' "));
+                }
+            }
+            return entry;
+        }
+
+        public Boolean TryGet<T>(String key, out T value) {
+            Object entry = HttpRuntime.Cache.Get(BuildCacheKey(key));
+            Boolean exist = false;
+            if (entry != null) {
+                exist = true;
+                if (!(entry is T)) {
+                    if (_supportNull && !(entry == _nullEntry)) {
+                        throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
+                            key, entry.GetType().FullName, typeof(T).FullName));
+                    }
+                    value = (T)((Object)null);
+                }
+                else {
+                    value = (T)entry;
+                }
+            }
+            else {
+                value = default(T);
+            }
+            return exist;
+        }
+
+        public T GetOrCreate<T>(String key, Func<String, T> factory) {
+            T value;
+            if (TryGet<T>(key, out value)) {
+                return value;
+            }
+            value = factory(key);
+            Overwrite(key, value);
+            return value;
+        }
+
+        public T GetOrCreate<T>(String key, Func<T> function) {
+            T value;
+            if (TryGet<T>(key, out value)) {
+                return value;
+            }
+            value = function();
+            Overwrite(key, value);
+            return value;
+        }
+
+        public T GetOrCreate<T>(String key, Func<T> function, TimeSpan slidingExpiration) {
+            T value;
+            if (TryGet<T>(key, out value)) {
+                return value;
+            }
+            value = function();
+            Overwrite(key, value, slidingExpiration);
+            return value;
+        }
+
+        public T GetOrCreate<T>(String key, Func<T> function, DateTime absoluteExpiration) {
+            T value;
+            if (TryGet<T>(key, out value)) {
+                return value;
+            }
+            value = function();
+            Overwrite(key, value, absoluteExpiration);
+            return value;
+        }
+
+        public void Overwrite<T>(String key, T value) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), BuildCacheEntry<T>(value));
+        }
+
+        //slidingExpiration 时间内无访问则过期
+        public void Overwrite<T>(String key, T value, TimeSpan slidingExpiration) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), BuildCacheEntry<T>(value), null,
+                Cache.NoAbsoluteExpiration, slidingExpiration);
+        }
+
+        //absoluteExpiration 时过期
+        public void Overwrite<T>(String key, T value, DateTime absoluteExpiration) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), BuildCacheEntry<T>(value), null,
+                absoluteExpiration, Cache.NoSlidingExpiration);
+        }
+
+        public void Expire(String key) {
+            HttpRuntime.Cache.Remove(BuildCacheKey(key));
+        }
+
+        protected virtual Boolean Hit(DictionaryEntry entry) {
+            return (entry.Key is String) && ((String)entry.Key).StartsWith("HttpRuntimeCacheProvider_");
+        }
+
+        public void ExpireAll() {
+            lock (_sync) {
+                var entries = HttpRuntime.Cache.OfType<DictionaryEntry>().Where(Hit);
+                foreach (var entry in entries) {
+                    HttpRuntime.Cache.Remove((String)entry.Key);
+                }
+            }
+        }
+
+        public Int32 Count {
+            get {
+                lock (_sync) {
+                    return HttpRuntime.Cache.OfType<DictionaryEntry>().Where(Hit).Count();
+                }
+            }
+        }
+    }
+
+然后是分区缓存需要修改构造函数：
+
+    public HttpRuntimeRegionCacheProvider(String region)
+            : base(false) {
+            Region = region;
+        }
+
+        public HttpRuntimeRegionCacheProvider(String region, Boolean supportNull)
+            : base(supportNull) {
+            Region = region;
+        }
+        ...
+    }
+
+测试用例：
+
+    [TestClass]
+    public class HttpRuntimeCacheProviderTest {    
+        [TestMethod]
+        public void NullCacheErrorTest() {
+            var key = "key-null";
+            Person person = null;
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider(false);
+            try {
+                cacheProvider.GetOrCreate<Person>(key, () => person); //error
+                Assert.Fail();
+            }
+            catch (Exception ex) {
+                Assert.IsTrue(ex is InvalidOperationException);
+            }
+
+            Person person2;
+            var exist = cacheProvider.TryGet(key, out person2);
+            Assert.IsFalse(exist);
+            Assert.AreEqual(person2, null);
+        }
+
+        [TestMethod]
+        public void NullableCacheTest() {
+            var key = "key-nullable";
+            Person person = null;
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider(true);
+            cacheProvider.GetOrCreate<Person>(key, () => person);
+            Person person2;
+            var exist = cacheProvider.TryGet(key, out person2);
+            Assert.IsTrue(exist);
+            Assert.AreEqual(person2, null);
+        }
+
+        class Person {
+            public Int32 Id { get; set; }
+            public String Name { get; set; }
+        }
+    }
+3.3 封装与集成
+    多数情况下我们不需要暴露实现和手动创建上文所提各种 CacheProvider，实践中它们被 internal 修饰，再配合工厂类使用：
+    public static class CacheProviderFacotry {
+        public static ICacheProvider GetHttpContextCache() {
+            return new HttpContextCacheProvider();
+        }
+
+        public static IHttpRuntimeCacheProvider GetHttpRuntimeCache(Boolean supportNull = false) {
+            return new HttpRuntimeCacheProvider(supportNull);
+        }
+
+        public static IHttpRuntimeRegionCacheProvider GetHttpRuntimeRegionCache(String region, Boolean supportNull = false) {
+            return new HttpRuntimeRegionCacheProvider(region, supportNull);
+        }
+
+        public static IHttpRuntimeRegionCacheProvider Region(this IHttpRuntimeCacheProvider runtimeCacheProvider, String region, Boolean supportNull = false) {
+            return GetHttpRuntimeRegionCache(region, supportNull);
+        }
+    }
+
+然后在依赖注入中的声明如下，这里是 Autofac 下的组件注册：
+
+        ...
+            //请求级别缓存, 使用 HttpContext.Current.Items 作为容器
+            builder.Register(ctx => CacheProviderFacotry.GetHttpContextCache()).As<ICacheProvider>().InstancePerLifetimeScope();
+            //进程级别缓存, 使用 HttpRuntime.Cache 作为容器
+            builder.RegisterInstance(CacheProviderFacotry.GetHttpRuntimeCache()).As<IRuntimeCacheProvider>().ExternallyOwned();
+            //进程级别且隔离的缓存, 若出于key算法唯一考虑而希望加入上下文件信息, 则仍然需要 CacheModule 类的实现
+            builder.Register(ctx => CacheProviderFacotry.GetHttpRuntimeRegionCache(/*... 分区依据 ...*/))
+                .As<IRuntimeRegionCacheProvider>().InstancePerLifetimeScope();
+        ...
+
+4. 小结
+本文简单探讨了一个具有线程安全、分区、过期特性缓存模块的实现过程，谬误之处还请园友指正。
+jusfr 原创，转载请注明来自博客园 http://www.cnblogs.com/Jusfr/ 。

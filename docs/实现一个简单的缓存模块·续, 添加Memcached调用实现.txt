@@ -1,0 +1,312 @@
+在之前的实现中，我们初步实现了一个缓存模块：包含一个基于Http请求的缓存实现，一个基于HttpRuntime.Cache进程级的缓存实现，但观察代码，会发现如下问题：
+1. 有部分逻辑如 Boolean TryGet<T>(String key, out T entry) 的实现有重复现象，do not repeat yourself 提醒我们这里可以改进；
+2. 分区特性虽然实现了，但是使用了额外的接口承载，而大多数运用中，调用者无论是操作缓存项的创建还是过期，都不太关心分区参数 Region；的机制问题，计数和全部过期貌似不太现实，从这个接口派生恐怕不妥，怎么办？
+3. IHttpRuntimeCacheProvider 接口中功能太多，本文要添加一个基于 Memcached 的缓存实现类，而由于 Memcached 
+
+处理第1个问题，先梳理一下缓存获取即 GetOrCreate 逻辑，多数情况是这样的
+1）尝试从某容器或客户端如 HttpContext.Current.Items、HttpRuntime.Cache、MemcachedClient 判断缓存是否存在及获取缓存对象；
+2）缓存对象存在时进行类型对比，比如 id 已经被缓存成整型，现在新接口尝试将 Guid 类型写入，本文使用严格策略，该操作将抛出 InvalidOperationException 异常；
+3）缓存不存在时，执行委托计算出缓存值，将其写入容器；
+
+可以看出， GetOrCreate 将调用 TryGet 方法及 Overwrite 方法，我们可以使用抽象类，将前者写成具体实现，将后两者写成抽象方法，由具体子类去实现。
+
+    public interface ICacheProvider {
+        Boolean TryGet<T>(String key, out T entry);
+        T GetOrCreate<T>(String key, Func<T> function);
+        T GetOrCreate<T>(String key, Func<String, T> factory);
+        void Overwrite<T>(String key, T entry);
+        void Expire(String key);
+    }
+
+    public abstract class CacheProvider : ICacheProvider {
+        protected virtual String BuildCacheKey(String key) {
+            return key;
+        }
+        
+        protected abstract Boolean InnerTryGet(String key, out Object entry);
+
+        public virtual Boolean TryGet<T>(String key, out T entry) {
+            String cacheKey = BuildCacheKey(key);
+            Object cacheEntry;
+            Boolean exist = InnerTryGet(cacheKey, out cacheEntry);
+            if (exist) {
+                if (cacheEntry != null) {
+                    if (!(cacheEntry is T)) {
+                        throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
+                            key, cacheEntry.GetType().FullName, typeof(T).FullName));
+                    }
+                    entry = (T)cacheEntry;                    
+                }
+                else {
+                    entry = (T)((Object)null);
+                }
+            }
+            else {
+                entry = default(T);
+            }
+            return exist;
+        }
+
+        public virtual T GetOrCreate<T>(String key, Func<T> function) {
+            T entry;
+            if (TryGet(key, out entry)) {
+                return entry;
+            }
+            entry = function();
+            Overwrite(key, entry);
+            return entry;
+        }
+
+        public virtual T GetOrCreate<T>(String key, Func<String, T> factory) {
+            T entry;
+            if (TryGet(key, out entry)) {
+                return entry;
+            }
+            entry = factory(key);
+            Overwrite(key, entry);
+            return entry;
+        }
+
+        public abstract void Overwrite<T>(String key, T value);
+
+        public abstract void Expire(String key);
+    }
+
+抽象类 CacheProvider 的 InnerTryGet、Overwrite、Expire 是需要实现类来完成的，GetOrCreate 调用它们来完成核心逻辑；
+
+HttpContextCacheProvider 的实现，逻辑在父类实现后，看起来非常简洁了
+    public class HttpContextCacheProvider : CacheProvider, ICacheProvider {
+        private const String _prefix = "HttpContextCacheProvider_";
+        protected override String BuildCacheKey(String key) {
+            return String.Concat(_prefix, key);
+        }
+
+        protected override Boolean InnerTryGet(String key, out Object entry) {
+            Boolean exist = false;
+            entry = null;
+            if (HttpContext.Current.Items.Contains(key)) {
+                exist = true;
+                entry = HttpContext.Current.Items[key];
+            }
+            return exist;
+        }
+
+        public override void Overwrite<T>(String key, T entry) {
+            HttpContext.Current.Items[BuildCacheKey(key)] = entry;
+        }
+
+        public override void Expire(String key) {
+            HttpContext.Current.Items.Remove(BuildCacheKey(key));
+        }
+    }
+
+这里不准备为基于 HttpContext 的缓存提供太多特性，但基于 HttpRuntime.Cache 的缓存就需要像过期之类的功能，在实现之前先考虑问题2
+
+首先，既然用户没有必要甚至不知道分区存在，我们直接实现支持分区特性的子类好了；
+然后，计数与过期功能 HttpRuntime.Cache 支持但 Memcached 不，所以这部分功能需要从 IHttpRuntimeCacheProvider 中拆分出来，想到了吧，扩展方法！
+
+于是拆分 IHttpRuntimeCacheProvider 及其实现类，这里默认提交了对空缓存项的支持；
+
+    public class HttpRuntimeCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion {
+        private static readonly Object _nullEntry = new Object();
+        private String _prefix = "HttpRuntimeCacheProvider_";
+
+        public virtual String Region { get; private set; }
+
+        public HttpRuntimeCacheProvider() {
+        }
+
+        public HttpRuntimeCacheProvider(String region) {
+            Region = region;
+        }
+
+        protected override bool InnerTryGet(String key, out object entry) {
+            entry = HttpRuntime.Cache.Get(key);
+            return entry != null;
+        }
+
+        protected override String BuildCacheKey(String key) {
+            //Region 为空将被当作  String.Empty 处理
+            return Region == null
+                ? String.Concat(_prefix, key)
+                : String.Concat(_prefix, Region, key);
+        }
+
+        private Object BuildCacheEntry<T>(T value) {
+            Object entry = value;
+            if (value == null) {
+                entry = _nullEntry;
+            }
+            return entry;
+        }
+
+
+        public T GetOrCreate<T>(String key, Func<T> function, TimeSpan slidingExpiration) {
+            T value;
+            if (TryGet<T>(key, out value)) {
+                return value;
+            }
+            value = function();
+            Overwrite(key, value, slidingExpiration);
+            return value;
+        }
+
+        public T GetOrCreate<T>(String key, Func<T> function, DateTime absoluteExpiration) {
+            T value;
+            if (TryGet<T>(key, out value)) {
+                return value;
+            }
+            value = function();
+            Overwrite(key, value, absoluteExpiration);
+            return value;
+        }
+
+        public override void Overwrite<T>(String key, T value) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), BuildCacheEntry<T>(value));
+        }
+
+        //slidingExpiration 时间内无访问则过期
+        public void Overwrite<T>(String key, T value, TimeSpan slidingExpiration) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), BuildCacheEntry<T>(value), null,
+                Cache.NoAbsoluteExpiration, slidingExpiration);
+        }
+
+        //absoluteExpiration 时过期
+        public void Overwrite<T>(String key, T value, DateTime absoluteExpiration) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), BuildCacheEntry<T>(value), null,
+                absoluteExpiration, Cache.NoSlidingExpiration);
+        }
+
+        public override void Expire(String key) {
+            HttpRuntime.Cache.Remove(BuildCacheKey(key));
+        }
+
+        internal Boolean Hit(DictionaryEntry entry) {
+            return (entry.Key is String)
+                && ((String)entry.Key).StartsWith(BuildCacheKey(String.Empty));
+        }
+    }
+
+HttpRuntimeCacheProvider 暴露了一个 internal 修饰的方法，提供给扩展方法调用
+
+    public static class HttpRuntimeCacheProviderExtensions {
+
+        public static void ExpireAll(this HttpRuntimeCacheProvider cacheProvider) {
+            var entries = HttpRuntime.Cache.OfType<DictionaryEntry>()
+                .Where(cacheProvider.Hit);
+            foreach (var entry in entries) {
+                HttpRuntime.Cache.Remove((String)entry.Key);
+            }
+        }
+
+        public static Int32 Count(this HttpRuntimeCacheProvider cacheProvider) {
+            return HttpRuntime.Cache.OfType<DictionaryEntry>()
+                .Where(cacheProvider.Hit).Count();
+        }
+
+        public static String Dump(this HttpRuntimeCacheProvider cacheProvider) {
+            var builder = new StringBuilder(1024);
+            builder.AppendLine("--------------------HttpRuntimeCacheProvider.Dump--------------------------");
+            builder.AppendFormat("EffectivePercentagePhysicalMemoryLimit: {0}\r\n", HttpRuntime.Cache.EffectivePercentagePhysicalMemoryLimit);
+            builder.AppendFormat("EffectivePrivateBytesLimit: {0}\r\n", HttpRuntime.Cache.EffectivePrivateBytesLimit);
+            builder.AppendFormat("Count: {0}\r\n", HttpRuntime.Cache.Count);
+            builder.AppendLine();
+            var entries = HttpRuntime.Cache.OfType<DictionaryEntry>().Where(cacheProvider.Hit).OrderBy(de => de.Key);
+            foreach (var entry in entries) {
+                builder.AppendFormat("{0}\r\n    {1}\r\n", entry.Key, entry.Value.GetType().FullName);
+            }
+            builder.AppendLine("--------------------HttpRuntimeCacheProvider.Dump--------------------------");
+            Debug.WriteLine(builder.ToString());
+            return builder.ToString();
+        }
+    }
+
+考虑到计数、全部过期等功能并不常用，所以这里基本实现功能，并未周全地考虑并发、效率问题；至此功能拆分完成，我们转入 Memcached 实现；
+
+Memcached 客户端有相当多的C#实现，这里我选择了 EnyimMemcached，最新版本为2.12，见 https://github.com/enyim/EnyimMemcached 。与 HttpRuntimeCacheProvider 非常类似，从 CacheProvider 继承，实现 IHttpRuntimeCacheProvider, IRegion 接口，完成必要的逻辑即可。
+
+    public class MemcachedCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion {
+        private static readonly MemcachedClient _client = new MemcachedClient("enyim.com/memcached");
+
+        //EnyimMemcached 天然支持空缓存项，感觉没有必要添加一个“不支持空缓存项的特性”
+        //另外过期时间不能算的太准，会发现时间刚刚到而这货还没来得及过期
+
+        public String Region { get; private set; }
+
+        public MemcachedCacheProvider()
+            : this(String.Empty) {
+        }
+
+        public MemcachedCacheProvider(String region) {
+            Region = region;
+        }
+
+        protected override String BuildCacheKey(String key) {
+            return Region == null ? key : String.Concat(Region, "_", key);
+        }
+
+        protected override bool InnerTryGet(string key, out object entry) {
+            return _client.TryGet(key, out entry);
+        }
+
+
+        public T GetOrCreate<T>(String key, Func<T> function, TimeSpan slidingExpiration) {
+            T value;
+            if (TryGet<T>(key, out value)) {
+                return value;
+            }
+            value = function();
+            Overwrite(key, value, slidingExpiration);
+            return value;
+        }
+
+        public T GetOrCreate<T>(String key, Func<T> function, DateTime absoluteExpiration) {
+            T value;
+            if (TryGet<T>(key, out value)) {
+                return value;
+            }
+            value = function();
+            Overwrite(key, value, absoluteExpiration);
+            return value;
+        }
+
+        public override void Overwrite<T>(String key, T value) {
+            _client.Store(StoreMode.Set, BuildCacheKey(key), value);
+        }
+
+        //slidingExpiration 时间内无访问则过期
+        public void Overwrite<T>(String key, T value, TimeSpan slidingExpiration) {
+            _client.Store(StoreMode.Set, BuildCacheKey(key), value, slidingExpiration);
+        }
+
+        //absoluteExpiration 时过期
+        public void Overwrite<T>(String key, T value, DateTime absoluteExpiration) {
+            _client.Store(StoreMode.Set, BuildCacheKey(key), value, absoluteExpiration);
+        }
+
+        public override void Expire(String key) {
+            _client.Remove(BuildCacheKey(key));
+        }
+    }
+
+EnyimMemcached 不推荐使用过多的 MemcachedClient 实例，所以此处写成单例形式，另外如何配置等问题，请翻看项目的 Github，本文只给自己的配置如下，更多设置项及解释见 https://github.com/enyim/EnyimMemcached/wiki/MemcachedClient-Configuration 。
+
+需要注意的是，EnyimMemcached 处理的自定义对象需要使用 [Serializable] 修饰，不然操作无效且不报错，存在产生重大Bug的可能;
+
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <configSections>
+    <sectionGroup name="enyim.com">
+      <section name="memcached" type="Enyim.Caching.Configuration.MemcachedClientSection, Enyim.Caching" />
+    </sectionGroup>
+  </configSections>
+  <enyim.com>
+    <memcached protocol="Binary">
+      <servers>
+        <add address="192.168.25.129" port="11211" />
+      </servers>
+      <socketPool minPoolSize="10" maxPoolSize="100" connectionTimeout="00:00:10" />
+      <locator type="Enyim.Caching.Memcached.DefaultNodeLocator, Enyim.Caching" />
+    </memcached>
+  </enyim.com>
+</configuration>
