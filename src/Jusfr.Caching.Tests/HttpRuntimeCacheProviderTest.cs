@@ -1,6 +1,7 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
+﻿using System;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Threading;
+using Jusfr.Caching;
 
 namespace Jusfr.Caching.Tests {
     [TestClass]
@@ -47,17 +48,22 @@ namespace Jusfr.Caching.Tests {
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(2D));
+            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(1D));
             Assert.AreEqual(result, val);
 
-            var exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsTrue(exist);
-            Assert.AreEqual(result, val);
+            for (int i = 0; i < 3; i++) {
+                Thread.Sleep(1000);
+                var exist = cacheProvider.TryGet<Guid>(key, out val);
+                Assert.IsTrue(exist);
+                Assert.AreEqual(result, val);
+            }
 
-            Thread.Sleep(4000);
-            exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsFalse(exist);
-            Assert.AreEqual(val, Guid.Empty);
+            {
+                Thread.Sleep(2000);
+                var exist = cacheProvider.TryGet<Guid>(key, out val);
+                Assert.IsFalse(exist);
+                Assert.AreEqual(val, Guid.Empty);
+            }
         }
 
         [TestMethod]
@@ -162,7 +168,7 @@ namespace Jusfr.Caching.Tests {
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
             Assert.IsTrue(cacheProvider.Count() > 0);
-
+            
 
             cacheProvider.ExpireAll();
             Guid val2;

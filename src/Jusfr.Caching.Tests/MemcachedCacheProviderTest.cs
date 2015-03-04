@@ -1,6 +1,7 @@
-﻿using Jusfr.Caching.Memcached;
+﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
+using Jusfr.Caching;
+using Jusfr.Caching.Memcached;
 using System.Threading;
 
 namespace Jusfr.Caching.Tests {

@@ -1,6 +1,7 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
+﻿using System;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Web;
+using Jusfr.Caching;
 
 namespace Jusfr.Caching.Tests {
     [TestClass]

@@ -10,12 +10,10 @@ using System.Web.Caching;
 
 namespace Jusfr.Caching {
     public static class CacheProviderFactory {
-        //请求级别缓存
         public static ICacheProvider GetHttpContextCache() {
             return new HttpContextCacheProvider();
         }
 
-//#if DEBUG
         public static IHttpRuntimeCacheProvider GetHttpRuntimeCache() {
             return new HttpRuntimeCacheProvider();
         }
@@ -24,28 +22,7 @@ namespace Jusfr.Caching {
             return new HttpRuntimeCacheProvider(region);
         }
 
-        //开发环境，退化成 进程Cache
-        public static IHttpRuntimeCacheProvider GetDistributedCache() {
-            return new HttpRuntimeCacheProvider();
-        }
-
-        public static IHttpRuntimeCacheProvider GetDistributedCache(String region) {
-            return new HttpRuntimeCacheProvider(region);
-        }
-
-
-//#else
-//        //正式环境，使用 Memcached
-//        public static IHttpRuntimeCacheProvider GetDistributedCache() {
-//            return new MemcachedCacheProvider();
-//        }
-
-//        public static IHttpRuntimeCacheProvider GetDistributedCache(String region) {
-//            return new MemcachedCacheProvider(region);
-//        }
-//#endif
-
-        public static String Dump() {
+        public static String DumpHttpRuntimCache() {
             var builder = new StringBuilder(1024);
             builder.AppendLine("--------------------HttpRuntimeCacheProvider.Dump--------------------------");
             builder.AppendFormat("EffectivePercentagePhysicalMemoryLimit: {0}\r\n", HttpRuntime.Cache.EffectivePercentagePhysicalMemoryLimit);

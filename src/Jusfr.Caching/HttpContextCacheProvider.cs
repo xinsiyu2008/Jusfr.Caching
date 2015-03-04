@@ -8,7 +8,7 @@ using System.Web;
 
 namespace Jusfr.Caching {
     public class HttpContextCacheProvider : CacheProvider, ICacheProvider {
-        private const String _prefix = "HttpContextCacheProvider_";
+        private const String _prefix = "HCCP_";
         protected override String BuildCacheKey(String key) {
             return String.Concat(_prefix, key);
         }

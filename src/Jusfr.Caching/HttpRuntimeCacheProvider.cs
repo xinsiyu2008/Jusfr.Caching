@@ -11,7 +11,7 @@ using System.Web.Caching;
 namespace Jusfr.Caching {
     public class HttpRuntimeCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion {
         private static readonly Object _nullEntry = new Object();
-        private String _prefix = "HttpRuntimeCacheProvider_";
+        private const String _prefix = "HRCP_";
 
         public virtual String Region { get; private set; }
 
@@ -31,7 +31,7 @@ namespace Jusfr.Caching {
             //Region 为空将被当作  String.Empty 处理
             return Region == null
                 ? String.Concat(_prefix, key)
-                : String.Concat(_prefix, Region, key);
+                : String.Concat(_prefix, Region, "_", key);
         }
 
         private Object BuildCacheEntry<T>(T value) {
