@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -12,6 +13,7 @@ namespace Jusfr.Caching {
         
         protected abstract Boolean InnerTryGet(String key, out Object entry);
 
+        [MethodImpl(MethodImplOptions.Synchronized)]
         public virtual Boolean TryGet<T>(String key, out T entry) {
             String cacheKey = BuildCacheKey(key);
             Object cacheEntry;
