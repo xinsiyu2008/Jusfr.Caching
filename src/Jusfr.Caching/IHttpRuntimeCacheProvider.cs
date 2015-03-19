@@ -9,6 +9,6 @@ namespace Jusfr.Caching {
         T GetOrCreate<T>(String key, Func<T> function, TimeSpan slidingExpiration);
         T GetOrCreate<T>(String key, Func<T> function, DateTime absoluteExpiration);
         void Overwrite<T>(String key, T value, TimeSpan slidingExpiration);
-        void Overwrite<T>(String key, T value, DateTime absoluteExpiration);        
+        void Overwrite<T>(String key, T value, DateTime absoluteExpiration);
     }
 }

@@ -40,7 +40,6 @@ namespace Jusfr.Caching.Mongodb {
             var database = server.GetDatabase(_cacheCollection);
             var caches = database.GetCollection(Region ?? "default");
             if (caches == null) {
-                //throw new Exception(String.Format("Collection [{0}] not exist", Region));
                 database.CreateCollection(_cacheCollection);
             }
             return caches;

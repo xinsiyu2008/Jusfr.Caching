@@ -69,7 +69,7 @@ namespace Jusfr.Caching.Memcached {
         }
 
         public override void Expire(String key) {
-            _client.Remove(BuildCacheKey(key));
+            _client.Remove(BuildCacheKey(key));  // Could check result
         }
     }
 }
