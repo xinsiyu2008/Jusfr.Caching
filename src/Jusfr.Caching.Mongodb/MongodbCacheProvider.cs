@@ -38,11 +38,7 @@ namespace Jusfr.Caching.Mongodb {
         private MongoCollection<BsonDocument> GetCacheCollection() {
             var server = _client.GetServer();
             var database = server.GetDatabase(_cacheCollection);
-            var caches = database.GetCollection(Region ?? "default");
-            if (caches == null) {
-                database.CreateCollection(_cacheCollection);
-            }
-            return caches;
+            return database.GetCollection(Region ?? "default");
         }
 
         protected override String BuildCacheKey(String key) {
