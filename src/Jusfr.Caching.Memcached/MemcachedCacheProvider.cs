@@ -29,10 +29,31 @@ namespace Jusfr.Caching.Memcached {
             return Region == null ? key : String.Concat(Region, "_", key);
         }
 
-        protected override bool InnerTryGet(string key, out object entry) {
+        private Boolean InnerTryGet(string key, out object entry) {
             return _client.TryGet(key, out entry);
         }
 
+        public override bool TryGet<T>(string key, out T entry) {
+            String cacheKey = BuildCacheKey(key);
+            Object cacheEntry;
+            Boolean exist = InnerTryGet(cacheKey, out cacheEntry);
+            if (exist) {
+                if (cacheEntry != null) {
+                    if (!(cacheEntry is T)) {
+                        throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
+                            key, cacheEntry.GetType().FullName, typeof(T).FullName));
+                    }
+                    entry = (T)cacheEntry;
+                }
+                else {
+                    entry = (T)((Object)null);
+                }
+            }
+            else {
+                entry = default(T);
+            }
+            return exist;
+        }
 
         public T GetOrCreate<T>(String key, Func<T> function, TimeSpan slidingExpiration) {
             T value;

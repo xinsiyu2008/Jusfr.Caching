@@ -12,14 +12,14 @@ using System.Linq.Expressions;
 using MongoDB.Bson.Serialization;
 using System.Configuration;
 
-namespace Jusfr.Caching.Mongodb {
-    public class MongodbCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion {
+namespace Jusfr.Caching.Mongo {
+    public class MongoCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion {
         private static readonly MongoClient _client;
         private readonly String _cacheCollection = "cache";
 
         public String Region { get; private set; }
 
-        static MongodbCacheProvider() {
+        static MongoCacheProvider() {
             String connectionString = ConfigurationManager.AppSettings["mongodb"];
             if (String.IsNullOrWhiteSpace(connectionString)) {
                 throw new Exception("AppSettings \"mongodb\" missing");
@@ -27,11 +27,11 @@ namespace Jusfr.Caching.Mongodb {
             _client = new MongoClient(connectionString);
         }
 
-        public MongodbCacheProvider()
+        public MongoCacheProvider()
             : this(null) {
         }
 
-        public MongodbCacheProvider(String region) {
+        public MongoCacheProvider(String region) {
             Region = region;
         }
 
@@ -45,44 +45,45 @@ namespace Jusfr.Caching.Mongodb {
             return key;
         }
 
-        protected override Boolean InnerTryGet(String key, out Object entry) {
-            entry = null;
-            var exist = false;
-            var caches = GetCacheCollection();
-            var cacheBson = caches.FindOne(Query.EQ("_id", key));
-            var cache = BsonSerializer.Deserialize<Cache>(cacheBson);
+        //todo
+        //protected override Boolean InnerTryGet(String key, out Object entry) {
+        //    entry = null;
+        //    var exist = false;
+        //    var caches = GetCacheCollection();
+        //    var cacheBson = caches.FindOne(Query.EQ("_id", key));
+        //    var cache = BsonSerializer.Deserialize<Cache>(cacheBson);
 
-            if (cache != null) {
-                if (cache.AbsoluteExpiration.HasValue) {
-                    if (cache.AbsoluteExpiration.Value <= DateTime.UtcNow) {
-                        caches.Remove(Query<Cache>.EQ(e => e.Id, key));
-                    }
-                    else {
-                        //注意这是一个 BSON 而非 T, 后续类型检查会失败
-                        entry = cacheBson.GetElement("Entry");
-                        exist = true;
-                    }
-                }
-                else if (cache.SlidingExpiration.HasValue) {
-                    if (cache.CreateTime.Add(cache.SlidingExpiration.Value) < DateTime.UtcNow) {
-                        caches.Remove(Query<Cache>.EQ(e => e.Id, key));
-                    }
-                    else {
-                        cache.CreateTime = DateTime.UtcNow;
-                        caches.Save(cache);
-                        //注意这是一个 BSON 而非 T, 后续类型检查会失败
-                        entry = cacheBson.GetElement("Entry");
-                        exist = true;
-                    }
-                }
-                else {
-                    //注意这是一个 BSON 而非 T, 后续类型检查会失败
-                    entry = cacheBson.GetElement("Entry");
-                    exist = true;
-                }
-            }
-            return exist;
-        }
+        //    if (cache != null) {
+        //        if (cache.AbsoluteExpiration.HasValue) {
+        //            if (cache.AbsoluteExpiration.Value <= DateTime.UtcNow) {
+        //                caches.Remove(Query<Cache>.EQ(e => e.Id, key));
+        //            }
+        //            else {
+        //                //注意这是一个 BSON 而非 T, 后续类型检查会失败
+        //                entry = cacheBson.GetElement("Entry");
+        //                exist = true;
+        //            }
+        //        }
+        //        else if (cache.SlidingExpiration.HasValue) {
+        //            if (cache.CreateTime.Add(cache.SlidingExpiration.Value) < DateTime.UtcNow) {
+        //                caches.Remove(Query<Cache>.EQ(e => e.Id, key));
+        //            }
+        //            else {
+        //                cache.CreateTime = DateTime.UtcNow;
+        //                caches.Save(cache);
+        //                //注意这是一个 BSON 而非 T, 后续类型检查会失败
+        //                entry = cacheBson.GetElement("Entry");
+        //                exist = true;
+        //            }
+        //        }
+        //        else {
+        //            //注意这是一个 BSON 而非 T, 后续类型检查会失败
+        //            entry = cacheBson.GetElement("Entry");
+        //            exist = true;
+        //        }
+        //    }
+        //    return exist;
+        //}
 
         private Boolean InnerTryGet<T>(String key, out T entry) {
             entry = default(T);

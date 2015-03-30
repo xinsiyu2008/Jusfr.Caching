@@ -48,16 +48,20 @@ namespace Jusfr.Caching.Tests {
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(1D));
+            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(1.5D));
             Assert.AreEqual(result, val);
-
-            for (int i = 0; i < 3; i++) {
+            {
                 Thread.Sleep(1000);
                 var exist = cacheProvider.TryGet<Guid>(key, out val);
                 Assert.IsTrue(exist);
                 Assert.AreEqual(result, val);
             }
-
+            {
+                Thread.Sleep(1000);
+                var exist = cacheProvider.TryGet<Guid>(key, out val);
+                Assert.IsTrue(exist);
+                Assert.AreEqual(result, val);
+            }
             {
                 Thread.Sleep(2000);
                 var exist = cacheProvider.TryGet<Guid>(key, out val);
@@ -168,7 +172,7 @@ namespace Jusfr.Caching.Tests {
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
             Assert.IsTrue(cacheProvider.Count() > 0);
-            
+
 
             cacheProvider.ExpireAll();
             Guid val2;

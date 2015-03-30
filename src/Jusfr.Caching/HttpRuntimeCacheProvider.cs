@@ -22,9 +22,31 @@ namespace Jusfr.Caching {
             Region = region;
         }
 
-        protected override bool InnerTryGet(String key, out object entry) {
+        private Boolean InnerTryGet(String key, out object entry) {
             entry = HttpRuntime.Cache.Get(key);
             return entry != null;
+        }
+
+        public override bool TryGet<T>(string key, out T entry) {
+            String cacheKey = BuildCacheKey(key);
+            Object cacheEntry;
+            Boolean exist = InnerTryGet(cacheKey, out cacheEntry);
+            if (exist) {
+                if (cacheEntry != null) {
+                    if (!(cacheEntry is T)) {
+                        throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
+                            key, cacheEntry.GetType().FullName, typeof(T).FullName));
+                    }
+                    entry = (T)cacheEntry;
+                }
+                else {
+                    entry = (T)((Object)null);
+                }
+            }
+            else {
+                entry = default(T);
+            }
+            return exist;
         }
 
         protected override String BuildCacheKey(String key) {

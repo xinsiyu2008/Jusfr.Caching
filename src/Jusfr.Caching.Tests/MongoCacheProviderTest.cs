@@ -3,17 +3,17 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Jusfr.Caching;
 using Jusfr.Caching.Memcached;
 using System.Threading;
-using Jusfr.Caching.Mongodb;
+using Jusfr.Caching.Mongo;
 
 namespace Jusfr.Caching.Tests {
     [TestClass]
-    public class MongodbCacheProviderTest {
+    public class MongoCacheProviderTest {
         [TestMethod]
         public void TryGetTest() {
             var key = "TryGetTest";
             Guid val;
 
-            IHttpRuntimeCacheProvider cacheProvider = new MongodbCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new MongoCacheProvider();
             var exist = cacheProvider.TryGet<Guid>(key, out val);
             Assert.IsFalse(exist);
             Assert.AreEqual(val, Guid.Empty);
@@ -30,7 +30,7 @@ namespace Jusfr.Caching.Tests {
             var key = "GetOrCreateTest";
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new MongodbCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new MongoCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -54,7 +54,7 @@ namespace Jusfr.Caching.Tests {
             var key = "GetOrCreateWithslidingExpirationTest";
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new MongodbCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new MongoCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(4D));
             Assert.AreEqual(result, val);
 
@@ -73,7 +73,7 @@ namespace Jusfr.Caching.Tests {
             var key = "GetOrCreateWithAbsoluteExpirationTest";
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new MongodbCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new MongoCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val, DateTime.UtcNow.AddSeconds(4D));
             Assert.AreEqual(result, val);
 
@@ -93,7 +93,7 @@ namespace Jusfr.Caching.Tests {
             var key = "OverwriteTest";
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new MongodbCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new MongoCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -111,7 +111,7 @@ namespace Jusfr.Caching.Tests {
             var key = "OverwriteWithslidingExpirationTest";
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new MongodbCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new MongoCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -134,7 +134,7 @@ namespace Jusfr.Caching.Tests {
             var key = "OverwriteWithAbsoluteExpirationTest";
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new MongodbCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new MongoCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -157,7 +157,7 @@ namespace Jusfr.Caching.Tests {
             var key = "ExpireTest";
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new MongodbCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new MongoCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 

@@ -11,30 +11,8 @@ namespace Jusfr.Caching {
             return key;
         }
         
-        protected abstract Boolean InnerTryGet(String key, out Object entry);
-
         [MethodImpl(MethodImplOptions.Synchronized)]
-        public virtual Boolean TryGet<T>(String key, out T entry) {
-            String cacheKey = BuildCacheKey(key);
-            Object cacheEntry;
-            Boolean exist = InnerTryGet(cacheKey, out cacheEntry);
-            if (exist) {
-                if (cacheEntry != null) {
-                    if (!(cacheEntry is T)) {
-                        throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
-                            key, cacheEntry.GetType().FullName, typeof(T).FullName));
-                    }
-                    entry = (T)cacheEntry;                    
-                }
-                else {
-                    entry = (T)((Object)null);
-                }
-            }
-            else {
-                entry = default(T);
-            }
-            return exist;
-        }
+        public abstract Boolean TryGet<T>(String key, out T entry);        
 
         public virtual T GetOrCreate<T>(String key, Func<T> function) {
             T entry;

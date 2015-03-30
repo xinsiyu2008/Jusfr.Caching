@@ -13,12 +13,34 @@ namespace Jusfr.Caching {
             return String.Concat(_prefix, key);
         }
 
-        protected override Boolean InnerTryGet(String key, out Object entry) {
+        private Boolean InnerTryGet(String key, out Object entry) {
             Boolean exist = false;
             entry = null;
             if (HttpContext.Current.Items.Contains(key)) {
                 exist = true;
                 entry = HttpContext.Current.Items[key];
+            }
+            return exist;
+        }
+
+        public override bool TryGet<T>(string key, out T entry) {
+            String cacheKey = BuildCacheKey(key);
+            Object cacheEntry;
+            Boolean exist = InnerTryGet(cacheKey, out cacheEntry);
+            if (exist) {
+                if (cacheEntry != null) {
+                    if (!(cacheEntry is T)) {
+                        throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
+                            key, cacheEntry.GetType().FullName, typeof(T).FullName));
+                    }
+                    entry = (T)cacheEntry;
+                }
+                else {
+                    entry = (T)((Object)null);
+                }
+            }
+            else {
+                entry = default(T);
             }
             return exist;
         }
