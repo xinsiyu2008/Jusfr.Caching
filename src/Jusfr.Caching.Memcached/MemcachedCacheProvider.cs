@@ -13,10 +13,6 @@ using System.Web.Caching;
 namespace Jusfr.Caching.Memcached {
     public class MemcachedCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion {
         private static readonly MemcachedClient _client = new MemcachedClient("enyim.com/memcached");
-
-        //EnyimMemcached 天然支持空缓存项，感觉没有必要添加一个“不支持空缓存项的特性”
-        //另外过期时间不能算的太准，会发现时间刚刚到而这货还没来得及过期
-
         public String Region { get; private set; }
 
         public MemcachedCacheProvider() {
@@ -35,18 +31,35 @@ namespace Jusfr.Caching.Memcached {
             return _client.TryGet(BuildCacheKey(key), out entry);
         }
 
-        public override bool TryGet<T>(string key, out T entry) {            
+        public override bool TryGet<T>(string key, out T entry) {
             Object cacheEntry;
             Boolean exist = TryGetObject(key, out cacheEntry);
             if (exist) {
                 if (cacheEntry != null) {
                     if (cacheEntry is ExpirationWraper<T>) {
                         var cacheWraper = (ExpirationWraper<T>)cacheEntry;
+                        //表示滑动过期缓存项
                         if (cacheWraper.AbsoluteExpiration == Cache.NoAbsoluteExpiration) {
-                            //表示滑动过期缓存项，重新存储
-                            Overwrite(key, cacheWraper.Value, cacheWraper.SlidingExpiration);
+                            var diffSpan = DateTime.Now.Subtract(cacheWraper.SettingTime);
+
+                            //当前时间-设置时间>滑动时间, 已经过期
+                            if (diffSpan > cacheWraper.SlidingExpiration) {
+                                Expire(key);
+                                exist = false;
+                                entry = (T)((Object)null);
+                            }
+                            //当前时间-设置时间> 滑动时间/2, 更新缓存
+                            else if (diffSpan.Add(diffSpan) > cacheWraper.SlidingExpiration) {
+                                entry = cacheWraper.Value;
+                                Overwrite(key, cacheWraper.Value, cacheWraper.SlidingExpiration);
+                            }
+                            else {
+                                entry = cacheWraper.Value;
+                            }
                         }
-                        entry = cacheWraper.Value;
+                        else {
+                            entry = cacheWraper.Value;
+                        }
                     }
                     else if (!(cacheEntry is T)) {
                         throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
@@ -92,8 +105,10 @@ namespace Jusfr.Caching.Memcached {
 
         //slidingExpiration 时间内无访问则过期
         public void Overwrite<T>(String key, T value, TimeSpan slidingExpiration) {
+            //Console.WriteLine("{0:HH:mm:ss} Overwrite {1} : {2}", DateTime.Now, key, value);
             var cacheWraper = new ExpirationWraper<T>(value, slidingExpiration);
-            _client.Store(StoreMode.Set, BuildCacheKey(key), cacheWraper, slidingExpiration);
+            _client.Store(StoreMode.Set, BuildCacheKey(key), cacheWraper,
+                TimeSpan.FromSeconds(slidingExpiration.TotalSeconds * 1.5));
         }
 
         //absoluteExpiration 时过期
@@ -110,6 +125,7 @@ namespace Jusfr.Caching.Memcached {
             public T Value { get; private set; }
             public DateTime AbsoluteExpiration { get; private set; }
             public TimeSpan SlidingExpiration { get; private set; }
+            public DateTime SettingTime { get; set; }
 
             public ExpirationWraper(T value, DateTime absoluteExpiration)
                 : this(value, absoluteExpiration, Cache.NoSlidingExpiration) {
@@ -123,6 +139,7 @@ namespace Jusfr.Caching.Memcached {
                 Value = value;
                 AbsoluteExpiration = absoluteExpiration;
                 SlidingExpiration = slidingExpiration;
+                SettingTime = DateTime.Now;
             }
         }
 
