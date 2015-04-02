@@ -34,50 +34,53 @@ namespace Jusfr.Caching.Memcached {
         public override bool TryGet<T>(string key, out T entry) {
             Object cacheEntry;
             Boolean exist = TryGetObject(key, out cacheEntry);
-            if (exist) {
-                if (cacheEntry != null) {
-                    if (cacheEntry is ExpirationWraper<T>) {
-                        var cacheWraper = (ExpirationWraper<T>)cacheEntry;
-                        //表示滑动过期缓存项
-                        if (cacheWraper.AbsoluteExpiration == Cache.NoAbsoluteExpiration) {
-                            var diffSpan = DateTime.Now.Subtract(cacheWraper.SettingTime);
-
-                            //当前时间-设置时间>滑动时间, 已经过期
-                            if (diffSpan > cacheWraper.SlidingExpiration) {
-                                Expire(key);
-                                exist = false;
-                                entry = (T)((Object)null);
-                            }
-                            //当前时间-设置时间> 滑动时间/2, 更新缓存
-                            else if (diffSpan.Add(diffSpan) > cacheWraper.SlidingExpiration) {
-                                entry = cacheWraper.Value;
-                                Overwrite(key, cacheWraper.Value, cacheWraper.SlidingExpiration);
-                            }
-                            else {
-                                entry = cacheWraper.Value;
-                            }
-                        }
-                        else {
-                            entry = cacheWraper.Value;
-                        }
-                    }
-                    else if (!(cacheEntry is T)) {
-                        throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
-                            key, cacheEntry.GetType().FullName, typeof(T).FullName));
-                    }
-                    else {
-                        entry = (T)cacheEntry;
-                    }
-                }
-                else {
-                    entry = (T)((Object)null);
-                }
-            }
-            else {
+            if (!exist) {
+                //不存在
                 entry = default(T);
+                return false;
             }
-            return exist;
+            if (cacheEntry == null) {
+                //存在但为 null
+                entry = (T)((Object)null);
+                return true;
+            }
+            if (cacheEntry is T) {
+                //存在，直接返回
+                entry = (T)cacheEntry;
+                return true;
+            }
+
+            if (!(cacheEntry is ExpirationWraper<T>)) {
+                //类型不为 T 也不为 ExpirationWraper<T>，抛出异常
+                throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
+                    key, cacheEntry.GetType().FullName, typeof(T).FullName));
+            }
+
+            var cacheWraper = (ExpirationWraper<T>)cacheEntry;
+            //表示滑动过期缓存项
+            if (cacheWraper.SlidingExpiration == Cache.NoSlidingExpiration) {
+                //绝对时间过期，返回
+                entry = cacheWraper.Value;
+                return true;
+            }
+
+            var diffSpan = DateTime.Now.Subtract(cacheWraper.SettingTime);
+            //当前时间-设置时间>滑动时间, 已经过期
+            if (diffSpan > cacheWraper.SlidingExpiration) {
+                Expire(key);
+                entry = default(T);
+                return false;
+            }
+
+            //当前时间-设置时间> 滑动时间/2, 更新缓存
+            if (diffSpan.Add(diffSpan) > cacheWraper.SlidingExpiration) {
+                entry = cacheWraper.Value;
+                Overwrite(key, cacheWraper.Value, cacheWraper.SlidingExpiration);
+            }
+            entry = cacheWraper.Value;
+            return true;
         }
+
 
         public T GetOrCreate<T>(String key, Func<T> function, TimeSpan slidingExpiration) {
             T value;
@@ -105,13 +108,12 @@ namespace Jusfr.Caching.Memcached {
 
         //slidingExpiration 时间内无访问则过期
         public void Overwrite<T>(String key, T value, TimeSpan slidingExpiration) {
-            //Console.WriteLine("{0:HH:mm:ss} Overwrite {1} : {2}", DateTime.Now, key, value);
             var cacheWraper = new ExpirationWraper<T>(value, slidingExpiration);
             _client.Store(StoreMode.Set, BuildCacheKey(key), cacheWraper,
                 TimeSpan.FromSeconds(slidingExpiration.TotalSeconds * 1.5));
         }
 
-        //absoluteExpiration 时过期
+        //absoluteExpiration UTC或本地时间均可
         public void Overwrite<T>(String key, T value, DateTime absoluteExpiration) {
             _client.Store(StoreMode.Set, BuildCacheKey(key), value, absoluteExpiration);
         }

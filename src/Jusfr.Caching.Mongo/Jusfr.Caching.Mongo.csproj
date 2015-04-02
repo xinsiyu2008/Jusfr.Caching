@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{8FC90CF5-9684-494F-B3CD-0F6FD5B1C8D3}</ProjectGuid>
+    <ProjectGuid>{E9E7B1F6-5DC5-47B6-9118-80B953C95122}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Jusfr.Caching.Mongo</RootNamespace>
