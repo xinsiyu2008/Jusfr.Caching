@@ -1,0 +1,254 @@
+﻿Memcached 滑动过期实现与二分法优化
+
+Jusfr 原创，转载请注明来自博客园。
+
+第一部分 前言
+
+HttpRuntime.Cache.Insert() 方法的 slidingExpiration 参数能保证缓存被访问后，有效时间延长；而 Memcached 并没有实现该能力，形如第3方类库 EnyimCaching 提供的 MemcachedClient.Store() 方法提供的重载
+
+	public bool Store(StoreMode mode, string key, object value);
+	public bool Store(StoreMode mode, string key, object value, DateTime expiresAt);
+	public bool Store(StoreMode mode, string key, object value, TimeSpan validFor);
+	
+仍然是按绝对时间过期，和前者并非同一语义，本文目的是处理这个问题，并给出更优化的方案。
+
+EnyimCaching 接口封装的很好，需要注意的是像配置错误等都不会导致异常抛出，所以使用时最好来个测试用例进行确认。
+
+	[TestMethod]
+	public void Online() {
+		using (MemcachedClient client = new MemcachedClient("enyim.com/memcached")) {
+			String key = Guid.NewGuid().ToString("n");
+			Object value = client.Get(key);
+			Assert.IsNull(value);
+
+			var exist = client.TryGet(key, out value);
+			Assert.IsFalse(exist);
+			Assert.IsNull(value);
+
+			value = Guid.NewGuid();
+			client.Store(StoreMode.Set, key, value);
+			exist = client.TryGet(key, out value);
+			Assert.IsTrue(exist);
+			Assert.IsNotNull(value);
+		}
+	}
+
+同样需要注意的是客户端时间与 Memcached 所在服务器时间不一致时将导致过期时间和预期不太一致，考虑到是 Windows 下开发，像 Ubuntu 服务器可以使用以下命令同步时间并重新启动 Memcached 进程
+
+	sudo ntpdate time.windows.com
+	sudo hwclock -w	
+	sudo service memcached restart
+	
+然后是原始滑动过期的测试使用
+
+	[TestMethod]
+	public void Sliding() {
+		using (MemcachedClient client = new MemcachedClient("enyim.com/memcached")) {
+			String key = Guid.NewGuid().ToString("n");
+			Object value = Guid.NewGuid();
+			client.Store(StoreMode.Set, key, value, TimeSpan.FromSeconds(15D));
+
+			Thread.Sleep(TimeSpan.FromSeconds(10D));
+			var exist = client.TryGet(key, out value);
+			Assert.IsTrue(exist); 
+			Assert.IsNotNull(value);
+
+			Thread.Sleep(TimeSpan.FromSeconds(10D));
+			exist = client.TryGet(key, out value);
+			Assert.IsTrue(exist); //failed
+			Assert.IsNotNull(value);
+		}
+	}
+	
+测试用例未通过，这里使用的过期参数为15秒，10秒后检查缓存得知存在，再过10秒后缓存已经过期。
+
+第二部分 实现
+
+你可以已经看出来了，如果希望第2个10秒时，缓存仍然可以访问，那么第1个8秒时，将已经取出的缓存再存一次即可。确实如此，障碍是缓存取出时没有携带时间信息，我翻看了API，好像没有这办法（如果谬误，还请指正），所以我们可以拿一个 泛型Wraper 将时间和值一起存到缓存时，取出时进行对比。
+
+定义 SlidingCacheWraper<TCache> 如下，注意 [Serializable] 在 EnyimCaching 的使用中是需要的：
+
+    [Serializable]
+    public class SlidingCacheWraper<TCache> {
+        public TCache Cache { get; private set; }
+        public DateTime CachingTime { get; private set; }
+        public TimeSpan SlidingExpiration { get; private set; }
+
+        public SlidingCacheWraper(TCache cache, TimeSpan slidingExpiration) {
+            Cache = cache;
+            SlidingExpiration = slidingExpiration;
+            CachingTime = DateTime.Now;
+        }
+    }
+
+大致逻辑是这样：当需要存储一个滑动过期项时，我们先使用 SlidingCacheWraper 包裹起这个缓存项，记录缓存时间及滑动过期参数，送入 Memcached；当从 Memcached 取出这项时，先对比当前时间和缓存时间间隔，如果没有超出滑动过期参数，就将其按照该参数重新存入；
+
+	[TestMethod]
+	public void SlidingWithResotre() {
+		using (MemcachedClient client = new MemcachedClient("enyim.com/memcached")) {
+            String key = Guid.NewGuid().ToString("n");
+            Object value = Guid.NewGuid();
+
+            {
+                var slidingExpiration = TimeSpan.FromSeconds(15D);
+                Object wraper = new SlidingCacheWraper<Object>(value, slidingExpiration);
+                client.Store(StoreMode.Set, key, wraper, TimeSpan.FromSeconds(12D));
+            }
+
+            Thread.Sleep(TimeSpan.FromSeconds(10D));
+            {
+                Object wraperObj;
+                var exist = client.TryGet(key, out wraperObj);
+                Assert.IsTrue(exist);
+                Assert.IsNotNull(wraperObj);
+
+                Assert.IsTrue(wraperObj is SlidingCacheWraper<Object>);
+                var wraper = (SlidingCacheWraper<Object>)wraperObj;
+                Assert.IsNotNull(wraper.Cache);
+                Assert.AreEqual(value, wraper.Cache);
+
+                client.Store(StoreMode.Set, key, wraper, wraper.SlidingExpiration);
+            }
+
+            Thread.Sleep(TimeSpan.FromSeconds(10D));
+            {
+                Object wraperObj;
+                var exist = client.TryGet(key, out wraperObj);
+                Assert.IsTrue(exist);
+                Assert.IsNotNull(wraperObj);
+
+                Assert.IsTrue(wraperObj is SlidingCacheWraper<Object>);
+                var wraper = (SlidingCacheWraper<Object>)wraperObj;
+                Assert.IsNotNull(wraper.Cache);
+                Assert.AreEqual(value, wraper.Cache);
+
+                client.Store(StoreMode.Set, key, wraper, wraper.SlidingExpiration);
+            }
+
+            Thread.Sleep(TimeSpan.FromSeconds(20D));
+            {
+                Object wraperObj;
+                var exist = client.TryGet(key, out wraperObj);
+                Assert.IsFalse(exist);
+                Assert.IsNull(wraperObj);
+            }
+        }
+	}
+
+先存储滑过过期参数为15秒的缓存项，然后两次间隔10秒访问并期望缓存未过期，再进行间隔20秒访问并期望缓存已经过期，相似代码块括起来了，测试通过。
+
+第三部分 优化
+
+诚然前面的逻辑已经实现了滑动过期的效果，但你应该注意到一个问题，就是为了这个需求，每次缓存读取，我们都得重新写入一次，即便 Memcached 性能很棒，反复命中缓存时的大量写入也有 IO 及序列化压力，这是可以优化的。
+
+滑动过期就意味着缓存项的存活时间延长，又不能通过写入解决，我的直观思路就是：给缓存项加上“伪过期时间”，从起始算起在多出来的缓存时间时命中则不更新缓存。
+
+	[TestMethod]
+	public void SlidingWithResotre() {
+		using (MemcachedClient client = new MemcachedClient("enyim.com/memcached")) {
+            String key = Guid.NewGuid().ToString("n");
+            Object value = Guid.NewGuid();
+            Action handler = () => {
+                Object wraperObj;
+                var exist = client.TryGet(key, out wraperObj);
+                if (exist) {
+                    Assert.IsNotNull(wraperObj);
+                    Assert.IsTrue(wraperObj is SlidingCacheWraper<Object>);
+                    var wraper = (SlidingCacheWraper<Object>)wraperObj;
+                    Assert.IsNotNull(wraper.Cache);
+                    Assert.AreEqual(value, wraper.Cache);
+
+                    TimeSpan diffSpan = DateTime.Now - wraper.CachingTime;
+                    Console.WriteLine("Get cache, diff {0:F0} sec., sliding {1:f0} sec.",
+                        diffSpan.TotalSeconds, wraper.SlidingExpiration.TotalSeconds);
+
+                    //当前时间-设置时间>滑动时间, 已经过期
+                    if (diffSpan > wraper.SlidingExpiration) {
+                        Console.WriteLine("Remove cache");
+                        client.Remove(key);
+                        return;
+                    }
+
+                    //当前时间-设置时间> 滑动时间/2, 更新缓存
+                    if (diffSpan.Add(diffSpan) > wraper.SlidingExpiration) {
+                        Console.WriteLine("Restore cahce");
+                        client.Store(StoreMode.Set, key, wraper, wraper.SlidingExpiration);
+                    }
+                }
+                else {
+                    Console.WriteLine("Overdue");
+                }
+            };
+
+
+            var slidingExpiration = TimeSpan.FromSeconds(15D);
+            Object extendedWraper = new SlidingCacheWraper<Object>(value, TimeSpan.FromSeconds(slidingExpiration.TotalSeconds * 1.5));
+            client.Store(StoreMode.Set, key, extendedWraper, slidingExpiration);
+
+            var random = new Random();
+            for (int i = 0; i < 6; i++) {
+                Thread.Sleep(TimeSpan.FromSeconds(15 * random.NextDouble()));
+                handler();
+            }
+        }
+    }
+
+可以看到，当在缓存过期时间的前半段访问时，并没有重新写入；在缓存过期时间的后半段访问时，进行重新写入；由于设置在 Memcached 中的时间是 SlidingExpiration * 1.5，仍然能够超过过期参数后访问到缓存，应立即判定缓存已经过期。
+
+测试用例使用了随机时间，即可能需要多次运行查看效果，也可以手动设置若干次 Sleep 时间查看效果，像某次输出如下：
+
+代码还是很冗长的，类型检查、时间差计算等等，封装好的接口见 https://github.com/jusfr/Jusfr.Caching/blob/master/src/Jusfr.Caching.Memcached/MemcachedCacheProvider.cs，整个实现思路过程可以参考前面两篇文章，代码片断如下：
+
+
+	public override bool TryGet<T>(string key, out T entry) {
+		Object cacheEntry;
+		Boolean exist = TryGetObject(key, out cacheEntry);
+		if (!exist) {
+			//不存在
+			entry = default(T);
+			return false;
+		}
+		if (cacheEntry == null) {
+			//存在但为 null
+			entry = (T)((Object)null);
+			return true;
+		}
+		if (cacheEntry is T) {
+			//存在，直接返回
+			entry = (T)cacheEntry;
+			return true;
+		}
+
+		if (!(cacheEntry is ExpirationWraper<T>)) {
+			//类型不为 T 也不为 ExpirationWraper<T>，抛出异常
+			throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
+				key, cacheEntry.GetType().FullName, typeof(T).FullName));
+		}
+
+		var cacheWraper = (ExpirationWraper<T>)cacheEntry;
+		//表示滑动过期缓存项
+		if (cacheWraper.SlidingExpiration == Cache.NoSlidingExpiration) {
+			//绝对时间过期，返回
+			entry = cacheWraper.Value;
+			return true;
+		}
+
+		var diffSpan = DateTime.Now.Subtract(cacheWraper.SettingTime);
+		//当前时间-设置时间 > 滑动时间, 已经过期
+		if (diffSpan > cacheWraper.SlidingExpiration) {
+			Expire(key);
+			entry = default(T);
+			return false;
+		}
+
+		//当前时间-设置时间 > 滑动时间/2, 更新缓存
+		if (diffSpan.Add(diffSpan) > cacheWraper.SlidingExpiration) {
+			entry = cacheWraper.Value;
+			Overwrite(key, cacheWraper.Value, cacheWraper.SlidingExpiration);
+		}
+		entry = cacheWraper.Value;
+		return true;
+	}
+
+至此优化完成，如果您有好的的方法，欢迎交流。
+Jusfr 原创，转载请注明来自博客园。
