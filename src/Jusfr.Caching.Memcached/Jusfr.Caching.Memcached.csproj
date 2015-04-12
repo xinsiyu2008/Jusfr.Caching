@@ -33,6 +33,15 @@
     <Reference Include="Enyim.Caching">
       <HintPath>..\packages\EnyimMemcached.2.12\lib\net35\Enyim.Caching.dll</HintPath>
     </Reference>
+    <Reference Include="Enyim.Caching.NLogAdapter">
+      <HintPath>..\packages\EnyimMemcached-NLog.2.12\lib\net35\Enyim.Caching.NLogAdapter.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\packages\Newtonsoft.Json.6.0.8\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="NLog">
+      <HintPath>..\packages\NLog.3.2.0.0\lib\net45\NLog.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Web" />
@@ -44,6 +53,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="MemcachedCacheProvider.cs" />
+    <Compile Include="NewtonsoftJsonTranscoder.cs" />
+    <Compile Include="NewtonsoftJsonUtil.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
