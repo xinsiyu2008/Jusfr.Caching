@@ -12,14 +12,17 @@ namespace Jusfr.Caching.Memcached {
         private static readonly Byte[] _donetBytes;
 
         static NewtonsoftJsonTranscoder() {
-            _donetBytes = new[] { 0, 1, 0, 0, 0, 255, 255, 255, 255 }
-                .Select(x => Convert.ToByte(x)).ToArray();
+            //_donetBytes = new[] { 0, 0, 1, 1, 0, 0, 0, 0, 255 }
+            //_donetBytes = new[] { 0, 1, 0, 0, 0, 255, 255, 255, 255 }
+                //.Select(x => Convert.ToByte(x)).ToArray();
+            _donetBytes = new[] { (Byte)0, (Byte)1, (Byte)255 }; ;
         }
 
         protected override object DeserializeObject(ArraySegment<byte> value) {
+            Console.WriteLine(String.Join(",",value.Array.Take(10)));
             if (value.Array.Length >= _donetBytes.Length) {
-                var equal = _donetBytes.Select((b, i) => value.Array[i] == b).Any(x => !x);
-                if (!equal) {
+                var isOrignalObjectByte = value.Array.Take(10).Distinct().Any(b => _donetBytes.Contains(b));
+                if (isOrignalObjectByte) {
                     return base.DeserializeObject(value);
                 }
             }

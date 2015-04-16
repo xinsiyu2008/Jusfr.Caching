@@ -37,7 +37,7 @@ namespace Jusfr.Caching.Redis {
         }
 
         protected override String BuildCacheKey(String key) {
-            return key;
+            return Region == null ? key : String.Concat(Region, "_", key);
         }
 
         private Boolean InnerTryGet(string key, out RedisValue entry) {
