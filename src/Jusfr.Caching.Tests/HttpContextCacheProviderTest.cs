@@ -12,7 +12,7 @@ namespace Jusfr.Caching.Tests {
         }
 
         [TestMethod]
-        public void NullValue() {
+        public void NullCache() {
             var key = "key-null";
             HttpContext.Current.Items.Add(key, null);
             Assert.IsTrue(HttpContext.Current.Items.Contains(key));
@@ -22,7 +22,7 @@ namespace Jusfr.Caching.Tests {
         [TestMethod]
         public void ValueType() {
             var key = "key-guid";
-            ICacheProvider cache = CacheProviderFactory.GetHttpContextCache();
+            ICacheProvider cache = new HttpContextCacheProvider();
             var id1 = Guid.NewGuid();
             var id2 = cache.GetOrCreate(key, () => id1);
             Assert.AreEqual(id1, id2);
@@ -38,7 +38,7 @@ namespace Jusfr.Caching.Tests {
         [TestMethod]
         public void ReferenceType() {
             var key = "key-object";
-            ICacheProvider cache = CacheProviderFactory.GetHttpContextCache();
+            ICacheProvider cache = new HttpContextCacheProvider();
             var id1 = new Object();
             var id2 = cache.GetOrCreate(key, () => id1);
             Assert.AreEqual(id1, id2);
@@ -54,7 +54,7 @@ namespace Jusfr.Caching.Tests {
         [TestMethod]
         public void ReferenceTypeValueChangeToNull() {
             var key = "key-object-null";
-            ICacheProvider cache = CacheProviderFactory.GetHttpContextCache();
+            ICacheProvider cache = new HttpContextCacheProvider();
             var id1 = new Object();
             var id2 = cache.GetOrCreate(key, () => id1);
             Assert.AreEqual(id1, id2);

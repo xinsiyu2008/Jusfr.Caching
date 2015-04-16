@@ -31,22 +31,30 @@ namespace Jusfr.Caching {
             String cacheKey = BuildCacheKey(key);
             Object cacheEntry;
             Boolean exist = InnerTryGet(cacheKey, out cacheEntry);
-            if (exist) {
-                if (cacheEntry != null) {
-                    if (!(cacheEntry is T)) {
-                        throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
-                            key, cacheEntry.GetType().FullName, typeof(T).FullName));
-                    }
-                    entry = (T)cacheEntry;
-                }
-                else {
-                    entry = (T)((Object)null);
-                }
+            if (!exist) {
+                entry = default(T);
+                return false;
+            }
+
+            if (cacheEntry == null) {
+                //虽然没有能力将 null 直接存入 HttpRuntime.Cache，判断还是进行了
+                entry = (T)((Object)null);
+                return true;
+            }
+            if (cacheEntry == _nullEntry) {
+                //如果是自定义 _nullEntry，说明存入的是 null
+                entry = default(T);
+                return true;
+            }
+            else if (cacheEntry is T) {
+                entry = (T)cacheEntry;
+                return true;
             }
             else {
-                entry = default(T);
+                // cacheEntry is not a T 
+                throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
+                    key, cacheEntry.GetType().FullName, typeof(T).FullName));
             }
-            return exist;
         }
 
         protected override String BuildCacheKey(String key) {

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web;
+using System.Web.Caching;
 
 namespace Jusfr.Caching {
     public static class HttpRuntimeCacheProviderExtensions {
@@ -33,7 +34,7 @@ namespace Jusfr.Caching {
             var entries = HttpRuntime.Cache.OfType<DictionaryEntry>()
                 .Where(cacheProvider.Hit).OrderBy(de => de.Key);
             foreach (var entry in entries) {
-                builder.AppendFormat("{0}\r\n    {1}\r\n", entry.Key, entry.Value.GetType().FullName);
+                builder.AppendFormat("{0,-20} {1}\r\n", entry.Key, entry.Value.GetType().FullName);
             }
             builder.AppendLine("--------------------HttpRuntimeCacheProvider.Dump--------------------------");
             Debug.WriteLine(builder.ToString());

@@ -27,22 +27,24 @@ namespace Jusfr.Caching {
             String cacheKey = BuildCacheKey(key);
             Object cacheEntry;
             Boolean exist = InnerTryGet(cacheKey, out cacheEntry);
-            if (exist) {
-                if (cacheEntry != null) {
-                    if (!(cacheEntry is T)) {
-                        throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
-                            key, cacheEntry.GetType().FullName, typeof(T).FullName));
-                    }
-                    entry = (T)cacheEntry;
-                }
-                else {
-                    entry = (T)((Object)null);
-                }
+            if (!exist) {
+                entry = default(T);
+                return false;
+            }
+
+            if (cacheEntry == null) {
+                entry = (T)((Object)null);
+                return true;
+            }
+            if (cacheEntry is T) {
+                entry = (T)cacheEntry;
+                return true;
             }
             else {
-                entry = default(T);
+                //cacheEntry is not a t
+                throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
+                    key, cacheEntry.GetType().FullName, typeof(T).FullName));
             }
-            return exist;
         }
 
         public override void Overwrite<T>(String key, T entry) {

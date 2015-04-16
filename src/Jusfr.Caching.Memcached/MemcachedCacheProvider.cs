@@ -9,6 +9,9 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using System.Web.Caching;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace Jusfr.Caching.Memcached {
     public class MemcachedCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion {
@@ -50,37 +53,30 @@ namespace Jusfr.Caching.Memcached {
                 return true;
             }
 
-            if (!(cacheEntry is ExpirationWraper<T>)) {
-                //类型不为 T 也不为 ExpirationWraper<T>，抛出异常
-                throw new InvalidOperationException(String.Format("缓存项`[{0}]`类型错误, {1} or {2} ?",
-                    key, cacheEntry.GetType().FullName, typeof(T).FullName));
-            }
+            //使用与不使用 NewtonsoftJsonTranscoder 的情况下都支持
+            SlidingCacheWrapper<T> slidingCache;
+            if (SlidingCacheWrapper<T>.IsSlidingCache(cacheEntry, out slidingCache)) {
+                //尝试以 SlidingCacheWrapper<T> 处理
+                var diffSpan = DateTime.Now.Subtract(slidingCache.SettingTime);
+                //当前时间-设置时间>滑动时间, 已经过期
+                if (diffSpan > slidingCache.SlidingExpiration) {
+                    Expire(key);
+                    entry = default(T);
+                    return false;
+                }
 
-            var cacheWraper = (ExpirationWraper<T>)cacheEntry;
-            //表示滑动过期缓存项
-            if (cacheWraper.SlidingExpiration == Cache.NoSlidingExpiration) {
-                //绝对时间过期，返回
-                entry = cacheWraper.Value;
-                return true;
+                //当前时间-设置时间> 滑动时间/2, 更新缓存
+                if (diffSpan.Add(diffSpan) > slidingCache.SlidingExpiration) {
+                    Overwrite(key, slidingCache.Value, slidingCache.SlidingExpiration);
+                }
+                entry = slidingCache.Value;
             }
-
-            var diffSpan = DateTime.Now.Subtract(cacheWraper.SettingTime);
-            //当前时间-设置时间>滑动时间, 已经过期
-            if (diffSpan > cacheWraper.SlidingExpiration) {
-                Expire(key);
-                entry = default(T);
-                return false;
+            else {
+                //尝试以普通JSON处理
+                entry = NewtonsoftJsonUtil.EnsureObjectType<T>(cacheEntry);
             }
-
-            //当前时间-设置时间> 滑动时间/2, 更新缓存
-            if (diffSpan.Add(diffSpan) > cacheWraper.SlidingExpiration) {
-                entry = cacheWraper.Value;
-                Overwrite(key, cacheWraper.Value, cacheWraper.SlidingExpiration);
-            }
-            entry = cacheWraper.Value;
             return true;
         }
-
 
         public T GetOrCreate<T>(String key, Func<T> function, TimeSpan slidingExpiration) {
             T value;
@@ -108,7 +104,8 @@ namespace Jusfr.Caching.Memcached {
 
         //slidingExpiration 时间内无访问则过期
         public void Overwrite<T>(String key, T value, TimeSpan slidingExpiration) {
-            var cacheWraper = new ExpirationWraper<T>(value, slidingExpiration);
+            //_client.Store(StoreMode.Set, BuildCacheKey(key), value, slidingExpiration);
+            var cacheWraper = new SlidingCacheWrapper<T>(value, slidingExpiration);
             _client.Store(StoreMode.Set, BuildCacheKey(key), cacheWraper,
                 TimeSpan.FromSeconds(slidingExpiration.TotalSeconds * 1.5));
         }
@@ -123,46 +120,51 @@ namespace Jusfr.Caching.Memcached {
         }
 
         [Serializable]
-        public class ExpirationWraper<T> {
+        public class SlidingCacheWrapper<T> {
+            private const String SlidingExpirationProp = "0091081c219a456982dc7c881cce70c1";
+            private const String SettingTimeProp = "fb7ec3ccf9764c7f9c4d4abe0878286b";
+
             public T Value { get; private set; }
-            public DateTime AbsoluteExpiration { get; private set; }
+            [JsonProperty(SlidingExpirationProp)]
             public TimeSpan SlidingExpiration { get; private set; }
+            [JsonProperty(SettingTimeProp)]
             public DateTime SettingTime { get; set; }
 
-            public ExpirationWraper(T value, DateTime absoluteExpiration)
-                : this(value, absoluteExpiration, Cache.NoSlidingExpiration) {
-            }
-
-            public ExpirationWraper(T value, TimeSpan slidingExpiration)
-                : this(value, Cache.NoAbsoluteExpiration, slidingExpiration) {
-            }
-
-            private ExpirationWraper(T value, DateTime absoluteExpiration, TimeSpan slidingExpiration) {
+            public SlidingCacheWrapper(T value, TimeSpan slidingExpiration) {
                 Value = value;
-                AbsoluteExpiration = absoluteExpiration;
                 SlidingExpiration = slidingExpiration;
                 SettingTime = DateTime.Now;
             }
+
+            public static Boolean IsSlidingCache(Object obj, out SlidingCacheWrapper<T> cacheEntry) {
+                cacheEntry = null;
+                if (obj is SlidingCacheWrapper<T>) {
+                    cacheEntry = (SlidingCacheWrapper<T>)obj;
+                    return true;
+                }
+                if (obj is JObject) {
+                    var jobj = (JObject)obj;
+                    if (jobj.Property(SlidingExpirationProp) != null && jobj.Property(SettingTimeProp) != null) {
+                        cacheEntry = jobj.ToObject<SlidingCacheWrapper<T>>();
+                        return true;
+                    }
+                }
+                return false;
+            }
         }
 
-        public struct NullableEntry<T> {
-            private T entry;
-            private Boolean isNull;
-
-            public NullableEntry(T value) {
-                entry = value;
-                isNull = (value == null);
-            }
-
-            public static implicit operator NullableEntry<T>(T value) {
-                return new NullableEntry<T>(value);
-            }
-
-            public static implicit operator T(NullableEntry<T> value) {
-                if (value.isNull) {
-                    return (T)((Object)null);
+        internal class NewtonsoftJsonUtil {
+            public static T EnsureObjectType<T>(Object obj) {
+                if (obj is T) {
+                    return (T)obj;
                 }
-                return value.entry;
+                else if (obj is JObject) {
+                    return ((JObject)obj).ToObject<T>();
+                }
+                else {
+                    //return (T)Convert.ChangeType(obj, typeof(T));  // Guid 类型将失败
+                    return JToken.FromObject(obj).ToObject<T>();
+                }
             }
         }
     }

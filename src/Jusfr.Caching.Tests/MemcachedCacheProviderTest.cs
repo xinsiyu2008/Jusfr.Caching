@@ -99,12 +99,13 @@ namespace Jusfr.Caching.Tests {
         [TestMethod]
         public void OverwriteWithslidingExpirationTest() {
             var key = Guid.NewGuid().ToString("n");
+            key = "ecc6cf4d923f48b3a98f11b9641549fd";
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
             cacheProvider.Overwrite(key, val, TimeSpan.FromSeconds(6D));
 
-            Guid result = Guid.NewGuid();
+            Guid result;
             for (var i = 0; i < 2; i++) {
                 Thread.Sleep(TimeSpan.FromSeconds(4D));
                 var exist = cacheProvider.TryGet<Guid>(key, out result);
@@ -117,13 +118,11 @@ namespace Jusfr.Caching.Tests {
                 var exist = cacheProvider.TryGet<Guid>(key, out result);
                 Assert.IsFalse(exist);
             }
-
         }
 
         [TestMethod]
         public void OverwriteWithAbsoluteExpirationTest() {
             var key = Guid.NewGuid().ToString("n");
-            key = "73218975a30d49ba9cd347bc1b62470a";
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
@@ -146,7 +145,6 @@ namespace Jusfr.Caching.Tests {
                 var exist = cacheProvider.TryGet<Guid>(key, out result);
                 Assert.IsFalse(exist);
             }
-
         }
 
         [TestMethod]

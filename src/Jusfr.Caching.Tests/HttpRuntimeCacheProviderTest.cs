@@ -6,12 +6,28 @@ using Jusfr.Caching;
 namespace Jusfr.Caching.Tests {
     [TestClass]
     public class HttpRuntimeCacheProviderTest {
+
+        [TestMethod]
+        public void NullCache() {
+            var key = Guid.NewGuid().ToString();
+            Object val;
+
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
+            var exist = cacheProvider.TryGet<Object>(key, out val);
+            Assert.IsFalse(exist);
+            Assert.AreEqual(val, null);
+
+            cacheProvider.Overwrite(key, val);
+            exist = cacheProvider.TryGet<Object>(key, out val);
+            Assert.IsNull(val);
+        }
+
         [TestMethod]
         public void TryGet() {
             var key = Guid.NewGuid().ToString();
             Guid val;
 
-            IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
             var exist = cacheProvider.TryGet<Guid>(key, out val);
             Assert.IsFalse(exist);
             Assert.AreEqual(val, Guid.Empty);
@@ -23,7 +39,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString();
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
+            var cacheProvider = new HttpRuntimeCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -47,7 +63,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString();
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(1.5D));
             Assert.AreEqual(result, val);
             {
@@ -75,7 +91,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString();
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val, DateTime.UtcNow.AddSeconds(2D));
             Assert.AreEqual(result, val);
 
@@ -94,7 +110,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString();
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -112,7 +128,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString();
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -132,7 +148,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString();
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -152,7 +168,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString();
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = CacheProviderFactory.GetHttpRuntimeCache();
+            IHttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
