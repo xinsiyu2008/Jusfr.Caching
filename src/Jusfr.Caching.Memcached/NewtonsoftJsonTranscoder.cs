@@ -14,14 +14,13 @@ namespace Jusfr.Caching.Memcached {
         static NewtonsoftJsonTranscoder() {
             //_donetBytes = new[] { 0, 0, 1, 1, 0, 0, 0, 0, 255 }
             //_donetBytes = new[] { 0, 1, 0, 0, 0, 255, 255, 255, 255 }
-                //.Select(x => Convert.ToByte(x)).ToArray();
+            //.Select(x => Convert.ToByte(x)).ToArray();
             _donetBytes = new[] { (Byte)0, (Byte)1, (Byte)255 }; ;
         }
 
         protected override object DeserializeObject(ArraySegment<byte> value) {
-            Console.WriteLine(String.Join(",",value.Array.Take(10)));
             if (value.Array.Length >= _donetBytes.Length) {
-                var isOrignalObjectByte = value.Array.Take(10).Distinct().Any(b => _donetBytes.Contains(b));
+                var isOrignalObjectByte = value.Array.Take(10).Distinct().All(b => _donetBytes.Contains(b));
                 if (isOrignalObjectByte) {
                     return base.DeserializeObject(value);
                 }
@@ -37,15 +36,14 @@ namespace Jusfr.Caching.Memcached {
         }
 
         protected override ArraySegment<byte> SerializeObject(object value) {
-            //return base.SerializeObject(value);
-
             JsonSerializer serializer = new JsonSerializer();
             using (MemoryStream memoryStream = new MemoryStream())
             using (TextWriter textWriter = new StreamWriter(memoryStream))
             using (JsonWriter jsonWriter = new JsonTextWriter(textWriter)) {
                 serializer.Serialize(jsonWriter, value);
                 jsonWriter.Flush();
-                return new ArraySegment<byte>(memoryStream.GetBuffer(), 0, (int)memoryStream.Length);
+                memoryStream.Seek(0L, SeekOrigin.Begin);
+                return new ArraySegment<byte>(memoryStream.ToArray());
             }
         }
     }

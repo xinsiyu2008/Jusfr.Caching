@@ -92,6 +92,37 @@ namespace Jusfr.Caching.Tests {
                 }
             }
         }
+
+        [TestMethod]
+        public void Compatibility2() {
+            var cache = new MemcachedCacheProvider("Test");
+            var person = new Person {
+                Id = 2,
+                Name = "Rattz",
+                Address = new Address {
+                    Line1 = "Haidin Shuzhoujie",
+                    Line2 = "Beijing China"
+                }
+            };
+
+            var key = "Person";
+            cache.Overwrite(key, person, TimeSpan.FromHours(1D));
+            Person personOut;
+            var exist = cache.TryGet<Person>(key, out personOut);
+            Assert.IsTrue(exist);
+            Assert.IsNotNull(personOut);
+        }
+
+        [TestMethod]
+        public void JsonTest() {
+            using (MemcachedClient client = new MemcachedClient("enyim.com/memcached")) {
+                String key = "IdentityProvider$_196fc6c9e6b4479dacae50eefaa53389";
+                Object value = null;
+                var exist = client.TryGet(key, out value);
+                Assert.IsTrue(exist);
+                Assert.IsNull(value);
+            }
+        }
     }
 
     [Serializable]
