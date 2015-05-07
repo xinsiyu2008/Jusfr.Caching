@@ -2,6 +2,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Threading;
 using Jusfr.Caching;
+using System.Web.Caching;
 
 namespace Jusfr.Caching.Tests {
     [TestClass]
@@ -197,6 +198,26 @@ namespace Jusfr.Caching.Tests {
             Assert.AreEqual(val2, Guid.Empty);
 
             Assert.IsTrue(cacheProvider.Count() == 0);
+        }
+
+
+        [TestMethod]
+        public void Callback() {
+            var key = Guid.NewGuid().ToString();
+            var val = Guid.NewGuid();
+
+            HttpRuntimeCacheProvider cacheProvider = new HttpRuntimeCacheProvider();
+            var expireCallback = new CacheItemUpdateCallback(Callback);
+            cacheProvider.Overwrite(key, val, DateTime.Now.AddSeconds(4D), expireCallback);
+            Thread.Sleep(5000);
+        }
+
+        private void Callback(string key, CacheItemUpdateReason reason, out object expensiveObject, out CacheDependency dependency, out DateTime absoluteExpiration, out TimeSpan slidingExpiration) {
+            expensiveObject = null;
+            dependency = null;
+            absoluteExpiration = Cache.NoAbsoluteExpiration;
+            slidingExpiration = Cache.NoSlidingExpiration;
+            Console.WriteLine("{0} key expired", key);
         }
     }
 }

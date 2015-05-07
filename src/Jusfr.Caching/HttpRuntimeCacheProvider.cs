@@ -103,10 +103,20 @@ namespace Jusfr.Caching {
                 Cache.NoAbsoluteExpiration, slidingExpiration);
         }
 
+        public void Overwrite<T>(String key, T value, TimeSpan slidingExpiration, CacheItemUpdateCallback expireCallback) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), BuildCacheEntry<T>(value), null,
+                Cache.NoAbsoluteExpiration, slidingExpiration, expireCallback);
+        }
+
         //absoluteExpiration 时过期
         public void Overwrite<T>(String key, T value, DateTime absoluteExpiration) {
             HttpRuntime.Cache.Insert(BuildCacheKey(key), BuildCacheEntry<T>(value), null,
                 absoluteExpiration, Cache.NoSlidingExpiration);
+        }
+
+        public void Overwrite<T>(String key, T value, DateTime absoluteExpiration, CacheItemUpdateCallback expireCallback) {
+            HttpRuntime.Cache.Insert(BuildCacheKey(key), BuildCacheEntry<T>(value), null,
+                absoluteExpiration, Cache.NoSlidingExpiration, expireCallback);
         }
 
         public override void Expire(String key) {
