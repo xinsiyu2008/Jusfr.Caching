@@ -1,0 +1,122 @@
+Memcached 类库 EnyimMemcached 下的JSON序列化和二进制序列化兼容
+
+本人在分布式的项目使用中 EnyimMemcached ，由于业务需求使用了其序列化扩展，这里作下记录。
+
+EnyimCaching 通过配置文件（见 https://github.com/enyim/EnyimMemcached/wiki/MemcachedClient-Configuration）提供了扩展点，MemcachedClient 的序列化由 ITranscoder 接口定义，提供了 DefaultTranscoder 和 DataContractTranscoder 两个实现类，前者作为默认，后面以XML序列化的方式重写了前者的对象序列化方法。
+
+EnyimCaching 是很典型的 DoNet 类型，内部逻辑使用 protected virtual 修饰，用户继承基类重写对应方法即可。
+
+DefaultTranscoder 使用了一组方法对对象进行序列化，我们关注的引用类型使用了原生的 BinaryFormatter 进行序列化，它的效率高，带来的最显著的问题是字节流带有 dll 强类型签名。对于分布式应用，到处引用 dll 并不是什么好主意；而其非 Donet 语言拿那些缓存直接没辙了，这是我们的需求。
+
+二进制序列化的效果
+
+扩展过程并不麻烦，JSON 是首先方案，引用 Newtonsoft.Json 创建继承自 DefaultTranscoder 的 NewtonsoftJsonTranscoder，序列化方法重写 SerializeObject(object value) 方法即可，代码实在不需要贴出来；
+
+        protected override ArraySegment<byte> SerializeObject(object value) {
+            JsonSerializer serializer = JsonSerializer.CreateDefault();
+            using (MemoryStream memoryStream = new MemoryStream())
+            using (TextWriter textWriter = new StreamWriter(memoryStream))
+            using (JsonWriter jsonWriter = new JsonTextWriter(textWriter)) {
+                serializer.Serialize(jsonWriter, value);
+                jsonWriter.Flush();
+                memoryStream.Seek(0L, SeekOrigin.Begin);
+                return new ArraySegment<byte>(memoryStream.ToArray());
+            }
+        }
+
+
+Json 序列化的效果    
+
+但是反序列化就不是再丢上几句就完了，因为要对 Memcached 中已有的二进制序列化数据兼容，先说 EnyimCaching 对象序列化与反序列化逻辑：
+1. CacheItem 是真正的缓存项，序列化时空对象时，使用长度为0的 byte 数组，结合 TypeCode.DBNull 枚举生成 CacheItem 实例；非空对象 调用 SerializeObject() 方法（内部使用 BinaryFormatter） 得到 byte 数组，组合 TypeCode.Object 枚举生成 CacheItem 实例;
+2. 反序列化时检查 TypeCode 枚举，对枚举为 TypeCode.DBNull 的 CacheItem 直接返回回 null；对枚举为 TypeCode.Object 的 CacheItem 调用 DeserializeObject() 方法并传入 Byte 数组；
+
+下边是我的思路与解决方案：
+
+对于非引用，Newtonsoft.Json 会序列化 “null” 字符串，虽然反序列化时有开销，但是按照 EnyimCaching 的逻辑，空引用判断在前，不会进入 SerializeObject() 和 DeserializeObject() 方法；如果不放心，可以进行自己的 byte 数组非空与长度判断；
+
+对于非空引用类型，Newtonsoft.Json 会序列化成形如 "{...}"的字符串，那么思路就来了：字符串“{}”的UTF8字节为[123, 125]，那么我们是不是可以读出部分字节进行对比？像这样：读取 buffer[0]，如果为123，则读取 buffer[buffer.Length - 1]，如果为 [125]，那么该 Byte 数组为 JSON 对象，可以使用 Newtonsoft.Json 反序列化；否则进行二进制序列化；
+
+        protected override object DeserializeObject(ArraySegment<byte> value) {
+            if (value.Array[0] != 123 || value.Array[value.Array.Length - 1] != 125) {
+                return base.DeserializeObject(value);
+            }
+
+            JsonSerializer serializer = JsonSerializer.CreateDefault();
+            serializer.NullValueHandling = NullValueHandling.Ignore;
+            using (MemoryStream memoryStream = new MemoryStream(value.Array, value.Offset, value.Count))
+            using (TextReader textReader = new StreamReader(memoryStream))
+            using (JsonReader jsonReader = new JsonTextReader(textReader)) {
+                return serializer.Deserialize(jsonReader);
+            }
+        }
+
+很快就被打脸了：本机测试用例通过，开发中也用了不短时间，然后同事和我说遇到反序列化异常，马上就知道问题在这里，我用的 Newtonsoft.Json 版本是 6.0.8，他的是 6.0.4，虽然版本不一致，但是不应该序列化出来的东西不一样；接着调试，发现他进行反序列化时，得到的 byte 数组前面多了4个为0的字节，大概长这样 [0, 0, 0, 0, 123, ...]，接着调试，然后反序列化时他得到的数组确实又是以 123 起头的，我就香蕉你个把那了！
+
+接着想办法，由于 BinaryFormatter 有自己规律，打印几个看看。可以看到前8个 byte 都是在 0, 1, 255 之间，立马又心生一记，直接贴代码：
+
+        Byte[] _donetBytes = new[] { (Byte)0, (Byte)1, (Byte)255 }; 
+
+        protected override object DeserializeObject(ArraySegment<byte> value) {
+            if (value.Array.Length >= _donetBytes.Length) {
+                var isOrignalObjectByte = value.Array.Take(10).Distinct().All(b => _donetBytes.Contains(b));
+                if (isOrignalObjectByte) {
+                    return base.DeserializeObject(value);
+                }
+            }
+
+            JsonSerializer serializer = JsonSerializer.CreateDefault();
+            serializer.NullValueHandling = NullValueHandling.Ignore;
+            using (MemoryStream memoryStream = new MemoryStream(value.Array, value.Offset, value.Count))
+            using (TextReader textReader = new StreamReader(memoryStream))
+            using (JsonReader jsonReader = new JsonTextReader(textReader)) {
+                return serializer.Deserialize(jsonReader);
+            }
+        }
+
+取 byte 数组的前10个，如果全部落入 [0, 1, 255] 中则使用 BinaryFormatter 反序列化，否则按 Newtonsoft.Json 反序列化；
+
+本以为没事了，过几天又有反序列化异常，实在是没功夫调试了，最后写成这样了：
+
+        private Byte[] _donetBytes = new[] { (Byte)0, (Byte)1, (Byte)255 }; 
+
+        private static Object JsonDeserialize(Byte[] buffer) {
+            JsonSerializer serializer = JsonSerializer.CreateDefault();
+            serializer.NullValueHandling = NullValueHandling.Ignore;
+            using (MemoryStream memoryStream = new MemoryStream(buffer))
+            using (TextReader textReader = new StreamReader(memoryStream))
+            using (JsonReader jsonReader = new JsonTextReader(textReader)) {
+                return serializer.Deserialize(jsonReader);
+            }
+        }
+
+        protected override object DeserializeObject(ArraySegment<byte> value) {
+            Boolean isJson = false;
+            if (value.Array[0] == 123 && value.Array[value.Array.Length - 1] == 125) {
+                isJson = true;
+            }
+            if (!isJson) {
+                var isOrignalObjectByte = value.Array.Take(10).Distinct().All(_donetBytes.Contains);
+                isJson = !isOrignalObjectByte;
+            }
+
+            if (isJson) {
+                return JsonDeserialize(value.Array);
+            }
+            else {
+                try {
+                    return base.DeserializeObject(value);
+                }
+                catch (SerializationException) {
+                    // Log or something
+                    return JsonDeserialize(value.Array);
+                }
+            }
+        }
+        
+首先用理想的首尾字节判断是否为 JSON，如果不是则判断前10个 byte 是否落入 [0, 1, 255]，最后还有一道补救，catch 二进制序列化失败下的异常，重新使用 json 序列化；
+
+至此世界太平了，时间有限，要对 byte 数组进行更准确更有效率的推断实在是没有精力，如果您有其他实践或更好的方案，还请指教。
+
+Jusfr 原创，转载请注明来自博客园。
+
