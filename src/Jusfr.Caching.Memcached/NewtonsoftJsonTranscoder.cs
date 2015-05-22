@@ -12,14 +12,7 @@ namespace Jusfr.Caching.Memcached {
     public class NewtonsoftJsonTranscoder : DefaultTranscoder {
         private static readonly Byte[] _donetBytes;
 
-        static NewtonsoftJsonTranscoder() {
-            //_donetBytes = new[] { 0, 0, 1, 1, 0, 0, 0, 0, 255 }
-            //_donetBytes = new[] { 0, 1, 0, 0, 0, 255, 255, 255, 255 }
-            //.Select(x => Convert.ToByte(x)).ToArray();
-            _donetBytes = new[] { (Byte)0, (Byte)1, (Byte)255 };
-        }
-
-        private static Object JsonDeserialize(Byte[] buffer) {
+        private Object JsonDeserialize(Byte[] buffer) {
             JsonSerializer serializer = JsonSerializer.CreateDefault();
             serializer.NullValueHandling = NullValueHandling.Ignore;
             using (MemoryStream memoryStream = new MemoryStream(buffer))
@@ -30,17 +23,26 @@ namespace Jusfr.Caching.Memcached {
         }
 
         protected override object DeserializeObject(ArraySegment<byte> value) {
+            Byte[] buffer;
+            if (value.Offset != 0) {
+                buffer = new Byte[value.Count];
+                Array.Copy(value.Array, value.Offset, buffer, 0, value.Count);
+            }
+            else {
+                buffer = value.Array;
+            }
+
             Boolean isJson = false;
-            if (value.Array[0] == 123 && value.Array[value.Array.Length - 1] == 125) {
+            if (buffer[0] == 123 && buffer[buffer.Length - 1] == 125) {
                 isJson = true;
             }
             if (!isJson) {
-                var isOrignalObjectByte = value.Array.Take(10).Distinct().All(_donetBytes.Contains);
+                var isOrignalObjectByte = buffer.Take(10).Distinct().All(_donetBytes.Contains);
                 isJson = !isOrignalObjectByte;
             }
 
             if (isJson) {
-                return JsonDeserialize(value.Array);
+                return JsonDeserialize(buffer);
             }
             else {
                 try {
@@ -48,7 +50,7 @@ namespace Jusfr.Caching.Memcached {
                 }
                 catch (SerializationException) {
                     // Log or something
-                    return JsonDeserialize(value.Array);
+                    return JsonDeserialize(buffer);
                 }
             }
         }
@@ -61,7 +63,7 @@ namespace Jusfr.Caching.Memcached {
                 serializer.Serialize(jsonWriter, value);
                 jsonWriter.Flush();
                 memoryStream.Seek(0L, SeekOrigin.Begin);
-                return new ArraySegment<byte>(memoryStream.ToArray());
+                return new ArraySegment<byte>(memoryStream.ToArray(), 0, (Int32)memoryStream.Length);
             }
         }
     }

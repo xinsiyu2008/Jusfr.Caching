@@ -113,16 +113,6 @@ namespace Jusfr.Caching.Tests {
             Assert.IsNotNull(personOut);
         }
 
-        [TestMethod]
-        public void JsonTest() {
-            using (MemcachedClient client = new MemcachedClient("enyim.com/memcached")) {
-                String key = "IdentityProvider$_196fc6c9e6b4479dacae50eefaa53389";
-                Object value = null;
-                var exist = client.TryGet(key, out value);
-                Assert.IsTrue(exist);
-                Assert.IsNull(value);
-            }
-        }
     }
 
     [Serializable]
