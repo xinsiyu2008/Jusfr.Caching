@@ -12,6 +12,10 @@ namespace Jusfr.Caching.Memcached {
     public class NewtonsoftJsonTranscoder : DefaultTranscoder {
         private static readonly Byte[] _donetBytes;
 
+        static NewtonsoftJsonTranscoder() {
+            _donetBytes = new[] { (Byte)0, (Byte)1, (Byte)255 };
+        }
+
         private Object JsonDeserialize(Byte[] buffer) {
             JsonSerializer serializer = JsonSerializer.CreateDefault();
             serializer.NullValueHandling = NullValueHandling.Ignore;
