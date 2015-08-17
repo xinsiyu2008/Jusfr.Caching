@@ -6,13 +6,9 @@ using Jusfr.Caching;
 namespace Jusfr.Caching.Tests {
     [TestClass]
     public class HttpContextCacheProviderTest {
-        [TestInitialize]
-        public void Initialize() {
-            HttpContext.Current = new HttpContext(new HttpRequest(null, "http://localhost", null), new HttpResponse(null));
-        }
-
         [TestMethod]
         public void NullCache() {
+            HttpContext.Current = new HttpContext(new HttpRequest(null, "http://localhost", null), new HttpResponse(null));
             var key = "key-null";
             HttpContext.Current.Items.Add(key, null);
             Assert.IsTrue(HttpContext.Current.Items.Contains(key));
