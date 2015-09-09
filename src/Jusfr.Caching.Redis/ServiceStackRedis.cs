@@ -27,11 +27,11 @@ namespace Jusfr.Caching.Redis {
         }
 
         public Boolean KeyExists(RedisField key) {
-            return _client.Exists(key) > 0;
+            return _client.Exists(key) == 1L;
         }
 
-        public Int64 KeyDelete(RedisField key) {
-            return _client.Del(key);
+        public Boolean KeyDelete(RedisField key) {
+            return _client.Del(key) == 1L;
         }
 
         public Boolean KeyExpire(RedisField key, TimeSpan expiry) {
@@ -50,6 +50,10 @@ namespace Jusfr.Caching.Redis {
             _client.Set(key, value);
         }
 
+        public Int64 HashLength(RedisField key) {
+            return _client.HLen(key);
+        }
+
         public RedisField HashGet(RedisField key, RedisField hashField) {
             return _client.HGet(key, hashField);
         }
@@ -58,26 +62,30 @@ namespace Jusfr.Caching.Redis {
             return _client.HSet(key, hashField, value);
         }
 
-        public void HashSet(RedisField key, IList<KeyValuePair<RedisField, RedisField>> pairs) {
-            var hashFields = pairs.Select(p =>(Byte[]) p.Key).ToArray();
+        public Int64 HashSet(RedisField key, RedisEntry hash) {
+            return _client.HSet(key, hash.Name, hash.Value);
+        }
+
+        public void HashSet(RedisField key, IList<RedisEntry> pairs) {
+            var hashFields = pairs.Select(p => (Byte[])p.Name).ToArray();
             var values = pairs.Select(p => (Byte[])p.Value).ToArray();
             _client.HMSet(key, hashFields, values);
         }
 
-        public KeyValuePair<RedisField, RedisField>[] HashGetAll(RedisField key) {
+        public RedisEntry[] HashGetAll(RedisField key) {
             var hash = _client.HGetAll(key);
             if (hash.Length == 0) {
                 return null;
             }
-            var list = new KeyValuePair<RedisField, RedisField>[hash.Length / 2];
+            var list = new RedisEntry[hash.Length / 2];
             for (int i = 0; i < list.Length; i++) {
-                list[i] = new KeyValuePair<RedisField, RedisField>(hash[2 * i], hash[2 * i + 1]);
+                list[i] = new RedisEntry(hash[2 * i], hash[2 * i + 1]);
             }
             return list;
         }
 
-        public Int64 HashDelete(RedisField key, RedisField hashField) {
-            return _client.HDel(key, hashField);
+        public Boolean HashDelete(RedisField key, RedisField hashField) {
+            return _client.HDel(key, hashField) == 1;
         }
 
         public Int64 ListLength(RedisField key) {
@@ -90,6 +98,12 @@ namespace Jusfr.Caching.Redis {
 
         public RedisField ListLeftPop(RedisField key) {
             return _client.LPop(key);
+        }
+
+        public RedisField[] ListRange(RedisField key, Int32 startingFrom, Int32 endingAt) {
+            return _client.LRange(key, startingFrom, endingAt)
+                .Select(r => (RedisField)r)
+                .ToArray();
         }
 
         public Int64 ListRightPush(RedisField key, RedisField value) {
