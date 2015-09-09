@@ -1,37 +1,17 @@
 ﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Jusfr.Caching;
-using Jusfr.Caching.Memcached;
-using System.Threading;
-using Jusfr.Caching.Mongo;
 using Jusfr.Caching.Redis;
+using System.Threading;
 
 namespace Jusfr.Caching.Tests {
     [TestClass]
     public class RedisCacheProviderTest {
         [TestMethod]
-        public void TryGetTest() {
-            var key = "TryGetTest";
-            Guid val;
-
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider();
-            var exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsFalse(exist);
-            Assert.AreEqual(val, Guid.Empty);
-
-            var val2 = Guid.NewGuid();
-            cacheProvider.Overwrite(key, val2);
-            exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsTrue(exist);
-            Assert.AreEqual(val, val2);
-        }
-
-        [TestMethod]
         public void GetOrCreateTest() {
-            var key = "GetOrCreateTest";
+            var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(new ServiceStackRedis());
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -51,50 +31,11 @@ namespace Jusfr.Caching.Tests {
         }
 
         [TestMethod]
-        public void GetOrCreateWithslidingExpirationTest() {
-            var key = "GetOrCreateWithslidingExpirationTest";
-            var val = Guid.NewGuid();
-
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider();
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(4D));
-            Assert.AreEqual(result, val);
-
-            var exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsTrue(exist);
-            Assert.AreEqual(result, val);
-
-            Thread.Sleep(TimeSpan.FromSeconds(8D));
-            exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsFalse(exist);
-            Assert.AreEqual(val, Guid.Empty);
-        }
-
-        [TestMethod]
-        public void GetOrCreateWithAbsoluteExpirationTest() {
-            var key = "GetOrCreateWithAbsoluteExpirationTest";
-            var val = Guid.NewGuid();
-
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider();
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, DateTime.UtcNow.AddSeconds(4D));
-            Assert.AreEqual(result, val);
-
-            var exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsTrue(exist);
-            Assert.AreEqual(result, val);
-
-            //注意服务器时间与本地时间的误差
-            Thread.Sleep(TimeSpan.FromSeconds(8D));
-            exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsFalse(exist);
-            Assert.AreEqual(val, Guid.Empty);
-        }
-
-        [TestMethod]
         public void OverwriteTest() {
-            var key = "OverwriteTest";
+            var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(new ServiceStackRedis());
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -109,56 +50,73 @@ namespace Jusfr.Caching.Tests {
 
         [TestMethod]
         public void OverwriteWithslidingExpirationTest() {
-            var key = "OverwriteWithslidingExpirationTest";
+            var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider();
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
-            Assert.AreEqual(result, val);
+            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(new ServiceStackRedis());
 
-            var exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsTrue(exist);
-
-            var val2 = Guid.NewGuid();
-            cacheProvider.Overwrite<Guid>(key, val2, TimeSpan.FromSeconds(4D));
-
-            Thread.Sleep(TimeSpan.FromSeconds(8D));
-            Guid val3;
-            exist = cacheProvider.TryGet<Guid>(key, out val3);
-            Assert.IsFalse(exist);
-            Assert.AreEqual(val3, Guid.Empty);
-
+            //DateTime.Now
+            Guid result;
+            cacheProvider.Overwrite(key, val, TimeSpan.FromSeconds(8D));
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
+                var exist = cacheProvider.TryGet<Guid>(key, out result);
+                Assert.IsTrue(exist);
+                Assert.AreEqual(result, val);
+            }
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
+                var exist = cacheProvider.TryGet<Guid>(key, out result);
+                Assert.IsFalse(exist);
+            }
         }
 
         [TestMethod]
         public void OverwriteWithAbsoluteExpirationTest() {
-            var key = "OverwriteWithAbsoluteExpirationTest";
+            var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider();
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
-            Assert.AreEqual(result, val);
+            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(new ServiceStackRedis());
+            var t1 = DateTime.Now.AddSeconds(8D);
+            var t2 = DateTime.UtcNow.AddSeconds(8D);
+            Assert.AreEqual(t1.ToTimestamp(), t2.ToTimestamp());
 
-            var exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsTrue(exist);
+            //DateTime.Now
+            Guid result;
+            cacheProvider.Overwrite(key, val, DateTime.Now.AddSeconds(8D));
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
+                var exist = cacheProvider.TryGet<Guid>(key, out result);
+                Assert.IsTrue(exist);
+                Assert.AreEqual(result, val);
+            }
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
+                var exist = cacheProvider.TryGet<Guid>(key, out result);
+                Assert.IsFalse(exist);
+            }
 
-            var val2 = Guid.NewGuid();
-            cacheProvider.Overwrite<Guid>(key, val2, DateTime.UtcNow.AddSeconds(4D));
-
-            Thread.Sleep(TimeSpan.FromSeconds(8D));
-            Guid val3;
-            exist = cacheProvider.TryGet<Guid>(key, out val3);
-            Assert.IsFalse(exist);
-            Assert.AreEqual(val3, Guid.Empty);
-
+            //DateTime.UtcNow
+            cacheProvider.Overwrite(key, val, DateTime.UtcNow.AddSeconds(8D));
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
+                var exist = cacheProvider.TryGet<Guid>(key, out result);
+                Assert.IsTrue(exist);
+                Assert.AreEqual(result, val);
+            }
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
+                var exist = cacheProvider.TryGet<Guid>(key, out result);
+                Assert.IsFalse(exist);
+            }
         }
 
         [TestMethod]
         public void ExpireTest() {
-            var key = "ExpireTest";
+            var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider();
+            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(new ServiceStackRedis());
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -173,4 +131,3 @@ namespace Jusfr.Caching.Tests {
         }
     }
 }
-

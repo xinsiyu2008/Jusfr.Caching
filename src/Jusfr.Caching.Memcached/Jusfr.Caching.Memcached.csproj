@@ -48,6 +48,7 @@
   <ItemGroup>
     <Compile Include="MemcachedCacheProvider.cs" />
     <Compile Include="NewtonsoftJsonTranscoder.cs" />
+    <Compile Include="NewtonsoftJsonUtil.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

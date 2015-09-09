@@ -32,53 +32,6 @@ namespace Jusfr.Caching.Tests {
         }
 
         [TestMethod]
-        public void GetOrCreateWithslidingExpirationTest() {
-            var key = Guid.NewGuid().ToString("n");
-            var val = Guid.NewGuid();
-
-            IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, TimeSpan.FromSeconds(6D));
-            Assert.AreEqual(result, val);
-
-            for (var i = 0; i < 2; i++) {
-                Thread.Sleep(TimeSpan.FromSeconds(4D));
-                var exist = cacheProvider.TryGet<Guid>(key, out result);
-                Assert.IsTrue(exist);
-                Assert.AreEqual(result, val);
-            }
-
-            {
-                Thread.Sleep(TimeSpan.FromSeconds(8D));
-                var exist = cacheProvider.TryGet<Guid>(key, out result);
-                Assert.IsFalse(exist);
-            }
-        }
-
-        [TestMethod]
-        public void GetOrCreateWithAbsoluteExpirationTest() {
-            var key = Guid.NewGuid().ToString("n");
-            var val = Guid.NewGuid();
-
-            IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val, DateTime.UtcNow.AddSeconds(6D));
-            Assert.AreEqual(result, val);
-
-            {
-                Thread.Sleep(TimeSpan.FromSeconds(4D));
-                var exist = cacheProvider.TryGet<Guid>(key, out result);
-                Assert.IsTrue(exist);
-                Assert.AreEqual(result, val);
-            }
-
-            {
-                Thread.Sleep(TimeSpan.FromSeconds(8D));
-                var exist = cacheProvider.TryGet<Guid>(key, out result);
-                Assert.IsFalse(exist);
-            }
-
-        }
-
-        [TestMethod]
         public void OverwriteTest() {
             var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
@@ -99,22 +52,21 @@ namespace Jusfr.Caching.Tests {
         [TestMethod]
         public void OverwriteWithslidingExpirationTest() {
             var key = Guid.NewGuid().ToString("n");
-            key = "ecc6cf4d923f48b3a98f11b9641549fd";
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
-            cacheProvider.Overwrite(key, val, TimeSpan.FromSeconds(6D));
 
+            //DateTime.Now
             Guid result;
-            for (var i = 0; i < 2; i++) {
-                Thread.Sleep(TimeSpan.FromSeconds(4D));
+            cacheProvider.Overwrite(key, val, TimeSpan.FromSeconds(8D));
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
                 var exist = cacheProvider.TryGet<Guid>(key, out result);
                 Assert.IsTrue(exist);
                 Assert.AreEqual(result, val);
             }
-
             {
-                Thread.Sleep(TimeSpan.FromSeconds(8D));
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
                 var exist = cacheProvider.TryGet<Guid>(key, out result);
                 Assert.IsFalse(exist);
             }
@@ -126,22 +78,35 @@ namespace Jusfr.Caching.Tests {
             var val = Guid.NewGuid();
 
             IHttpRuntimeCacheProvider cacheProvider = new MemcachedCacheProvider();
-            var t1 = DateTime.Now.AddSeconds(5D).ToTimestamp();
-            var t2 = DateTime.UtcNow.AddSeconds(5D).ToTimestamp();
-            Assert.AreEqual(t1, t2);
+            var t1 = DateTime.Now.AddSeconds(8D);
+            var t2 = DateTime.UtcNow.AddSeconds(8D);
+            Assert.AreEqual(t1.ToTimestamp(), t2.ToTimestamp());
 
-            cacheProvider.Overwrite(key, val, DateTime.Now.AddSeconds(6D));
-            Guid result = Guid.NewGuid();
-
+            //DateTime.Now
+            Guid result;
+            cacheProvider.Overwrite(key, val, DateTime.Now.AddSeconds(8D));
             {
-                Thread.Sleep(TimeSpan.FromSeconds(4D));
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
                 var exist = cacheProvider.TryGet<Guid>(key, out result);
                 Assert.IsTrue(exist);
                 Assert.AreEqual(result, val);
             }
-
             {
-                Thread.Sleep(TimeSpan.FromSeconds(8D));
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
+                var exist = cacheProvider.TryGet<Guid>(key, out result);
+                Assert.IsFalse(exist);
+            }
+
+            //DateTime.UtcNow
+            cacheProvider.Overwrite(key, val, DateTime.UtcNow.AddSeconds(8D));
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
+                var exist = cacheProvider.TryGet<Guid>(key, out result);
+                Assert.IsTrue(exist);
+                Assert.AreEqual(result, val);
+            }
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(5D));
                 var exist = cacheProvider.TryGet<Guid>(key, out result);
                 Assert.IsFalse(exist);
             }
