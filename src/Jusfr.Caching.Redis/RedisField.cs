@@ -131,4 +131,12 @@ namespace Jusfr.Caching.Redis {
             return Name.GetHashCode() ^ Value.GetHashCode();
         }
     }
+
+    public struct SortedSetRedisEntry : IEquatable<SortedSetRedisEntry> {
+
+
+        public bool Equals(SortedSetRedisEntry other) {
+            throw new NotImplementedException();
+        }
+    }
 }

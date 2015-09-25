@@ -114,6 +114,38 @@ namespace Jusfr.Caching.Redis {
             return _client.RPop(key);
         }
 
+        public Int64 SortedSetLength(RedisField key) {
+            return _client.ZCard(key);
+        }
 
+        public RedisField[] SortedSetRangeByRank(RedisField key, Int32 startPosition = 0, Int32 stopPosition = -1) {
+            return _client.ZRange(key, startPosition, stopPosition)
+                .Select(r => (RedisField)r)
+                .ToArray();
+        }
+
+        public Int64? SortedSetRank(RedisField key, RedisField member) {
+            var value = _client.ZRank(key, member);
+            if (value == -1) {
+                return null;
+            }
+            return value;
+        }
+
+        public long SortedSetAdd(RedisField key, RedisField value, double score) {
+            return _client.ZAdd(key, score, value);
+        }
+
+        public bool SortedSetRemove(RedisField key, RedisField member) {
+            return _client.ZRem(key, member) == 1;
+        }
+
+        public long SortedSetRemoveRangeByRank(RedisField key, Int32 startPosition, Int32 stopPosition) {
+            return _client.ZRemRangeByRank(key, startPosition, stopPosition);
+        }
+
+        public long SortedSetRemoveRangeByScore(RedisField key, double startScore, double stopScore) {
+            return _client.ZRemRangeByScore(key, startScore, stopScore);
+        }
     }
 }

@@ -3,6 +3,7 @@ using System.Text;
 using System.Collections.Generic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Jusfr.Caching.Redis;
+using System.Linq;
 
 namespace Jusfr.Caching.Tests {
     [TestClass]
@@ -186,6 +187,47 @@ namespace Jusfr.Caching.Tests {
                     Assert.IsFalse(deleted);
                 }
             }
+        }
+
+        [TestMethod]
+        public void SortSertTest() {
+            var cacheKey = Guid.NewGuid().ToString();
+            IRedis redis = new ServiceStackRedis();
+
+            var random = new Random();
+            var list = Enumerable.Repeat(0, 20).Select(r => random.Next(100)).Distinct().ToList();
+
+            for (int i = 0; i < list.Count; i++) {
+                redis.SortedSetAdd(cacheKey, list[i].ToString(), i);
+                var len = redis.SortedSetLength(cacheKey);
+                Assert.AreEqual(len, i + 1);
+            }
+
+            var values = redis.SortedSetRangeByRank(cacheKey, 0, -1);
+            Assert.AreEqual(values.Length, list.Count);
+            for (int i = 0; i < list.Count; i++) {
+                Assert.AreEqual((String)values[i], list[i].ToString());
+            }
+
+            for (int i = 0; i < 3; i++) {
+                var index1 = random.Next(list.Count);
+                var index2 = redis.SortedSetRank(cacheKey, list[index1].ToString());
+                Assert.AreEqual(index1, index2);
+            }
+
+            for (int i = 0; i < 3; i++) {
+                var index = random.Next(list.Count);
+                var value = list[index];
+                list.RemoveAt(index);
+                var removed = redis.SortedSetRemove(cacheKey, value.ToString());
+                Assert.IsTrue(removed);
+                var len = redis.SortedSetLength(cacheKey);
+                Assert.AreEqual(len, list.Count);
+            }
+
+            Assert.IsTrue(redis.SortedSetLength(cacheKey) > 3);
+            var removedByRank = redis.SortedSetRemoveRangeByRank(cacheKey, 0, 2);
+            Assert.AreEqual(removedByRank, 3);
         }
     }
 }
