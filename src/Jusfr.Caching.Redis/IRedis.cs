@@ -30,5 +30,7 @@ namespace Jusfr.Caching.Redis {
         RedisField ListLeftPop(RedisField key);
         Int64 ListRightPush(RedisField key, RedisField value);
         RedisField ListRightPop(RedisField key);
+
+        //Int64 SortedSetAdd(RedisField key, RedisField value, Double score)
     }
 }
