@@ -33,6 +33,7 @@ namespace Jusfr.Caching.Redis {
 
         Int64 SortedSetLength(RedisField key);
         RedisField[] SortedSetRangeByRank(RedisField key, Int32 startPosition = 0, Int32 stopPosition = -1);
+        RedisField[] SortedSetRangeByScore(RedisField key, double startScore = double.NegativeInfinity, double stopScore = double.PositiveInfinity, Int32 skip = 0, Int32 take = -1);
         Int64? SortedSetRank(RedisField key, RedisField member);
         Int64 SortedSetAdd(RedisField key, RedisField value, Double score);
         Boolean SortedSetRemove(RedisField key, RedisField member);

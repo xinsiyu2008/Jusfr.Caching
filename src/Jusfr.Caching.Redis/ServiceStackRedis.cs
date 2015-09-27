@@ -124,6 +124,12 @@ namespace Jusfr.Caching.Redis {
                 .ToArray();
         }
 
+        public RedisField[] SortedSetRangeByScore(RedisField key, double startScore = double.NegativeInfinity, double stopScore = double.PositiveInfinity, Int32 skip = 0, Int32 take = -1) {
+            return _client.ZRangeByScore(key, startScore, stopScore, skip, take)
+                .Select(r => (RedisField)r)
+                .ToArray();
+        }
+
         public Int64? SortedSetRank(RedisField key, RedisField member) {
             var value = _client.ZRank(key, member);
             if (value == -1) {
