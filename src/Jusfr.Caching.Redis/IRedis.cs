@@ -15,6 +15,8 @@ namespace Jusfr.Caching.Redis {
 
         RedisField StringGet(RedisField key);
         void StringSet(RedisField key, RedisField value);
+        Int64 StringIncrement(RedisField key, Int64 value = 1L);
+        Double StringIncrement(RedisField key, Double value);
 
         RedisField HashGet(RedisField key, RedisField hashField);
         Int64 HashLength(RedisField key);
