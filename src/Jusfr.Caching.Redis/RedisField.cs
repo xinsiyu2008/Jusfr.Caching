@@ -88,7 +88,8 @@ namespace Jusfr.Caching.Redis {
         public RedisField Name { get; private set; }
         public RedisField Value { get; private set; }
 
-        public RedisEntry(RedisField name, RedisField value) {
+        public RedisEntry(RedisField name, RedisField value) 
+            :this() {
             Name = name;
             Value = value;
         }
@@ -108,11 +109,11 @@ namespace Jusfr.Caching.Redis {
             return new KeyValuePair<RedisField, RedisField>(value.Name, value.Value);
         }
 
-        public static Boolean operator ==(RedisEntry re1, RedisEntry re2) {
+        public static Boolean operator == (RedisEntry re1, RedisEntry re2) {
             return re1.Name.Equals(re2.Name) && re1.Value.Equals(re2.Value);
         }
 
-        public static Boolean operator !=(RedisEntry re1, RedisEntry re2) {
+        public static Boolean operator != (RedisEntry re1, RedisEntry re2) {
             return !re1.Name.Equals(re2.Name) || !re1.Value.Equals(re2.Value);
         }
 
@@ -124,19 +125,11 @@ namespace Jusfr.Caching.Redis {
                 return false;
             }
 
-            return this.Equals((RedisEntry)obj);
+            return Equals((RedisEntry)obj);
         }
 
         public override int GetHashCode() {
             return Name.GetHashCode() ^ Value.GetHashCode();
-        }
-    }
-
-    public struct SortedSetRedisEntry : IEquatable<SortedSetRedisEntry> {
-
-
-        public bool Equals(SortedSetRedisEntry other) {
-            throw new NotImplementedException();
         }
     }
 }

@@ -8,24 +8,26 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Jusfr.Caching.Redis {
-    public class ServiceStackRedis : IRedis {
-        private readonly IRedisClientsManager _redisFactory;
+    public class ServiceStackRedis : IRedis, IDisposable {
+        private static readonly IRedisClientsManager _redisFactory;
 
-        public ServiceStackRedis() {
+        static ServiceStackRedis() {
             var connectionString = ConfigurationManager.AppSettings.Get("cache:redis");
             if (String.IsNullOrWhiteSpace(connectionString)) {
                 throw new Exception("AppSettings \"redis\" missing");
             }
-            _redisFactory = new BasicRedisClientManager(connectionString) { ConnectTimeout = 100 };
-        }
-
-        public ServiceStackRedis(IRedisClientsManager redisFactory) {
-            _redisFactory = redisFactory;
+            _redisFactory = new PooledRedisClientManager(connectionString) { ConnectTimeout = 100 };
         }
 
         //注意，用完需要dispose
         public IRedisNativeClient GetRedisClient() {
             return (IRedisNativeClient)_redisFactory.GetClient();
+        }
+
+        public void Dispose() {
+            if (_redisFactory != null) {
+                _redisFactory.Dispose();
+            }
         }
 
         public Boolean KeyExists(RedisField key) {
