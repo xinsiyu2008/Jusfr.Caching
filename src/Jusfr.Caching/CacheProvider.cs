@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Jusfr.Caching {
     public abstract class CacheProvider : ICacheProvider {
-        protected virtual String BuildCacheKey(String key) {
+        protected internal virtual String BuildCacheKey(String key) {
             return key;
         }
         

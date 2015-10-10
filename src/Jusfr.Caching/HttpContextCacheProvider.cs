@@ -16,7 +16,7 @@ namespace Jusfr.Caching {
             }
         }
 
-        protected override String BuildCacheKey(String key) {
+        protected internal override String BuildCacheKey(String key) {
             return String.Concat(_prefix, key);
         }
 

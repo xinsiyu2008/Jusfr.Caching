@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web;
-using System.Web.Caching;
+using System.Web.Script.Serialization;
 
 namespace Jusfr.Caching {
     public static class HttpRuntimeCacheProviderExtensions {
@@ -24,21 +24,49 @@ namespace Jusfr.Caching {
                 .Where(cacheProvider.Hit).Count();
         }
 
-        public static String Dump(this HttpRuntimeCacheProvider cacheProvider) {
-            var builder = new StringBuilder(1024);
-            builder.AppendLine("--------------------HttpRuntimeCacheProvider.Dump--------------------------");
-            builder.AppendFormat("EffectivePercentagePhysicalMemoryLimit: {0}\r\n", HttpRuntime.Cache.EffectivePercentagePhysicalMemoryLimit);
-            builder.AppendFormat("EffectivePrivateBytesLimit: {0}\r\n", HttpRuntime.Cache.EffectivePrivateBytesLimit);
-            builder.AppendFormat("Count: {0}\r\n", HttpRuntime.Cache.Count);
-            builder.AppendLine();
-            var entries = HttpRuntime.Cache.OfType<DictionaryEntry>()
-                .Where(cacheProvider.Hit).OrderBy(de => de.Key);
-            foreach (var entry in entries) {
-                builder.AppendFormat("{0,-20} {1}\r\n", entry.Key, entry.Value.GetType().FullName);
+        public static void Flush(this HttpRuntimeCacheProvider cacheProvider, Func<String, Boolean> predicate) {
+            var cacheFilename = GetCacheFilePath(cacheProvider);            
+            using (var stream = new FileStream(cacheFilename, FileMode.OpenOrCreate, FileAccess.ReadWrite))
+            using (var writer = new StreamWriter(stream)) {
+                var prefix = cacheProvider.BuildCacheKey(null);
+
+                stream.SetLength(0L);
+                var entries = HttpRuntime.Cache.OfType<DictionaryEntry>()
+                    .Where(cacheProvider.Hit)
+                    .Where(r => predicate(((String)r.Key).Substring(prefix.Length)));
+                var json = new JavaScriptSerializer();
+                foreach (var entry in entries) {
+                    writer.WriteLine(json.Serialize(entry));
+                }
+                writer.Flush();
             }
-            builder.AppendLine("--------------------HttpRuntimeCacheProvider.Dump--------------------------");
-            Debug.WriteLine(builder.ToString());
-            return builder.ToString();
+        }
+
+        private static string GetCacheFilePath(HttpRuntimeCacheProvider cacheProvider) {
+            var cacheFilename = AppDomain.CurrentDomain.BaseDirectory;
+            if (HttpRuntime.AppDomainAppId != null) {
+                cacheFilename = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "App_Data");
+            }
+            cacheFilename = Path.Combine(cacheFilename, String.Format("HRCP_{0}.cache", cacheProvider.Region));
+            return cacheFilename;
+        }
+
+        public static T Restore<T>(this HttpRuntimeCacheProvider cacheProvider, String key) {
+            var cacheFilename = GetCacheFilePath(cacheProvider);
+            if (!File.Exists(cacheFilename)) {
+                return default(T);
+            }
+            //{"Key":"HRCP_??","Value":??}
+            var cacheLineStart = String.Format("{{\"Key\":\"{0}\",\"Value\":", cacheProvider.BuildCacheKey(key));
+            var cacheCollection = File.ReadLines(cacheFilename);
+            var cacheLine = cacheCollection.FirstOrDefault(c => c.StartsWith(cacheLineStart));
+            if (cacheLine == null) {
+                return default(T);
+            }
+
+            cacheLine = cacheLine.Substring(cacheLineStart.Length, cacheLine.Length - cacheLineStart.Length - 1);
+            var json = new JavaScriptSerializer();
+            return json.Deserialize<T>(cacheLine);
         }
     }
 }

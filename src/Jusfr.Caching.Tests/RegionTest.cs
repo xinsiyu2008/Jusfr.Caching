@@ -103,10 +103,7 @@ namespace Jusfr.Caching.Tests {
             var count1 = cacheProvider1.Count();
             var count2 = cacheProvider2.Count();
             Assert.AreEqual(count1 + count2, total);
-
-            cacheProvider1.Dump();
-            cacheProvider2.Dump();
-
+            
             cacheProvider1.ExpireAll();
             Assert.IsTrue(cacheProvider1.Count() == 0);
             Assert.IsTrue(cacheProvider2.Count() == count2);

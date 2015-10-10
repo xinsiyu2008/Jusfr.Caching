@@ -57,11 +57,8 @@ namespace Jusfr.Caching {
             }
         }
 
-        protected override String BuildCacheKey(String key) {
-            //Region 为空将被当作  String.Empty 处理
-            return Region == null
-                ? String.Concat(_prefix, key)
-                : String.Concat(_prefix, Region, "_", key);
+        protected internal override String BuildCacheKey(String key) {
+            return String.Concat(_prefix, Region, "_", key);
         }
 
         private Object BuildCacheEntry<T>(T value) {

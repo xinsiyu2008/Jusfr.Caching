@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Threading;
 using Jusfr.Caching;
 using System.Web.Caching;
+using System.IO;
 
 namespace Jusfr.Caching.Tests {
     [TestClass]
@@ -218,6 +219,32 @@ namespace Jusfr.Caching.Tests {
             absoluteExpiration = Cache.NoAbsoluteExpiration;
             slidingExpiration = Cache.NoSlidingExpiration;
             Console.WriteLine("{0} key expired", key);
+        }
+
+        [TestMethod]
+        public void Flush() {
+            var cacheProvider = new HttpRuntimeCacheProvider();
+            cacheProvider.Overwrite("id", 21685);
+            cacheProvider.Overwrite("begin", DateTime.Now);
+            cacheProvider.Flush(k => true);
+            
+            cacheProvider = new HttpRuntimeCacheProvider("User");
+            cacheProvider.Overwrite("13", new User { Id = 13, Name = "Rattz", Age = 20, Address = new[] { "Beijing", "Wuhan" } });
+            cacheProvider.Overwrite("14", new User { Id = 14, Name = "Kate", Age = 18, Address = new[] { "Tokyo", "Los Angeles" } });
+            cacheProvider.Flush(k => k == "13");
+            cacheProvider.Restore<User>("13");
+            
+            cacheProvider = new HttpRuntimeCacheProvider("Job");
+            cacheProvider.Overwrite("52", new { Id = 52, Title = "Software Engineer", Salary = 10000 });
+            cacheProvider.Overwrite("100", new { Id = 100, Title = "Gwhilsttroenterologist", Salary = 12000 });
+            cacheProvider.Flush(k => true);
+        }
+
+        class User {
+            public Int32 Id { get; set; }
+            public String Name { get; set; }
+            public Int32 Age { get; set; }
+            public String[] Address { get; set; }
         }
     }
 }
