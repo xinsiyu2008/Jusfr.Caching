@@ -15,11 +15,13 @@ namespace Jusfr.Caching.Redis {
 
         RedisField StringGet(RedisField key);
         void StringSet(RedisField key, RedisField value);
-        Int64 StringIncrement(RedisField key, Int64 value = 1L);
+        Int64 StringIncrement(RedisField key, Int32 value = 1);
         Double StringIncrement(RedisField key, Double value);
 
         RedisField HashGet(RedisField key, RedisField hashField);
         Int64 HashLength(RedisField key);
+        Int64 HashIncrement(RedisField key, RedisField hashField, Int32 value = 1);
+        Double HashIncrement(RedisField key, RedisField hashField, Double value);
         Int64 HashSet(RedisField key, RedisField hashField, RedisField value);
         Int64 HashSet(RedisField key, RedisEntry hash);
         void HashSet(RedisField key, IList<RedisEntry> pairs);

@@ -66,9 +66,9 @@ namespace Jusfr.Caching.Redis {
             }
         }
 
-        public Int64 StringIncrement(RedisField key, Int64 value = 1L) {
+        public Int64 StringIncrement(RedisField key, Int32 value = 1) {
             using (var client = GetRedisClient()) {
-                return client.IncrBy(key, checked((Int32)value));
+                return client.IncrBy(key, value);
             }
         }
 
@@ -81,6 +81,18 @@ namespace Jusfr.Caching.Redis {
         public Int64 HashLength(RedisField key) {
             using (var client = GetRedisClient()) {
                 return client.HLen(key);
+            }
+        }
+
+        public Int64 HashIncrement(RedisField key, RedisField hashField, Int32 value = 1) {
+            using (var client = GetRedisClient()) {
+                return client.HIncrby(key, hashField, value);
+            }
+        }
+
+        public Double HashIncrement(RedisField key, RedisField hashField, Double value) {
+            using (var client = GetRedisClient()) {
+                return client.HIncrbyFloat(key, hashField, value);
             }
         }
 
