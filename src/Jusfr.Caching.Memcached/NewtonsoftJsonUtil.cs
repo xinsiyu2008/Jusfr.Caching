@@ -15,11 +15,7 @@ namespace Jusfr.Caching.Memcached {
             _jsonSettings = new JsonSerializerSettings {
                 NullValueHandling = NullValueHandling.Ignore,
                 DefaultValueHandling = DefaultValueHandling.IgnoreAndPopulate,
-#if DEBUG
-                Formatting = Formatting.Indented,
-#else
-                    Formatting = Formatting.None,
-#endif
+                Formatting = Formatting.None,
             };
         }
 

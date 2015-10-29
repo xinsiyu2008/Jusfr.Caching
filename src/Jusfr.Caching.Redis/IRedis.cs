@@ -19,13 +19,14 @@ namespace Jusfr.Caching.Redis {
         Double StringIncrement(RedisField key, Double value);
 
         RedisField HashGet(RedisField key, RedisField hashField);
+        RedisField[] HashGet(RedisField key, IList<RedisField> hashFields);
+        RedisEntry[] HashGetAll(RedisField key);
         Int64 HashLength(RedisField key);
         Int64 HashIncrement(RedisField key, RedisField hashField, Int32 value = 1);
         Double HashIncrement(RedisField key, RedisField hashField, Double value);
         Int64 HashSet(RedisField key, RedisField hashField, RedisField value);
         Int64 HashSet(RedisField key, RedisEntry hash);
         void HashSet(RedisField key, IList<RedisEntry> pairs);
-        RedisEntry[] HashGetAll(RedisField key);
         Boolean HashDelete(RedisField key, RedisField hashField);
 
         Int64 ListLength(RedisField key);
@@ -36,12 +37,21 @@ namespace Jusfr.Caching.Redis {
         RedisField ListRightPop(RedisField key);
 
         Int64 SortedSetLength(RedisField key);
-        RedisField[] SortedSetRangeByRank(RedisField key, Int32 startPosition = 0, Int32 stopPosition = -1);
-        RedisField[] SortedSetRangeByScore(RedisField key, double startScore = double.NegativeInfinity, double stopScore = double.PositiveInfinity, Int32 skip = 0, Int32 take = -1);
+        Double? SortedSetScore(RedisField key, RedisField member);
+        RedisField[] SortedSetRangeByRank(RedisField key, Int64 startPosition = 0, Int64 stopPosition = -1, Order order = Order.Ascending);
+        RedisField[] SortedSetRangeByScore(RedisField key, Double startScore = Double.NegativeInfinity, Double stopScore = Double.PositiveInfinity, Int64 skip = 0, Int64 take = -1, Order order = Order.Ascending);
+        RedisEntry[] SortedSetRangeByRankWithScores(RedisField key, Int64 startPosition = 0, Int64 stopPosition = -1, Order order = Order.Ascending);
+        RedisEntry[] SortedSetRangeByScoreWithScores(RedisField key, Double startScore = Double.NegativeInfinity, Double stopScore = Double.PositiveInfinity, Int64 skip = 0, Int64 take = -1, Order order = Order.Ascending);
         Int64? SortedSetRank(RedisField key, RedisField member);
         Int64 SortedSetAdd(RedisField key, RedisField value, Double score);
         Boolean SortedSetRemove(RedisField key, RedisField member);
-        Int64 SortedSetRemoveRangeByRank(RedisField key, Int32 startPosition, Int32 stopPosition);
+        Int64 SortedSetRemoveRangeByRank(RedisField key, Int64 startPosition, Int64 stopPosition);
         Int64 SortedSetRemoveRangeByScore(RedisField key, Double startScore, Double stopScore);
+        Double SortedSetIncrement(RedisField key, RedisField member, Double value);
+    }
+
+    public enum Order {
+        Ascending = 0,
+        Descending = 1
     }
 }

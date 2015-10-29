@@ -15,6 +15,10 @@ namespace Jusfr.Caching.Tests {
 
         [TestMethod]
         public void RedisField_Equal_Test() {
+            //StackExchange.Redis.IDatabase d;
+            //d.SortedSetRangeByRankWithScores;
+            //d.SortedSetRangeByScoreWithScores;
+
             RedisField f1 = new RedisField();
             RedisField f2 = new RedisField();
             Assert.IsTrue(f1 == f2);
@@ -137,62 +141,45 @@ namespace Jusfr.Caching.Tests {
             var cacheKey = Guid.NewGuid().ToString();
             IRedis redis = new ServiceStackRedis();
 
-            var hashListLength = Math.Abs(Guid.NewGuid().GetHashCode() % 24) + 8;
-            var names = new String[hashListLength].ToList();
-            var values = new String[hashListLength];
+            var count = 10;
+            var names = new String[count].ToList();
+            var values = new String[count];
 
-            var list = new List<RedisEntry>();
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < count; i++) {
                 names[i] = Guid.NewGuid().ToString();
                 values[i] = Guid.NewGuid().ToString();
-                list.Add(new RedisEntry(names[i], values[i]));
             }
+            var list = Enumerable.Range(0, count)
+                .Select(i => new RedisEntry(names[i], values[i]))
+                .ToArray();
+
             redis.HashSet(cacheKey, list);
-            Assert.AreEqual(redis.HashLength(cacheKey), list.Count);
+            Assert.AreEqual(redis.HashLength(cacheKey), count);
 
-            for (int i = 8; i < hashListLength; i++) {
-                names[i] = Guid.NewGuid().ToString();
-                values[i] = Guid.NewGuid().ToString();
-
-                if ((Guid.NewGuid().GetHashCode() & 1) == 0) {
-                    redis.HashSet(cacheKey, new RedisEntry(names[i], values[i]));
-                }
-                else {
-                    redis.HashSet(cacheKey, names[i], values[i]);
-                }
+            var array = redis.HashGet(cacheKey, names.Select(x => (RedisField)x).ToArray());
+            for (int i = 0; i < count; i++) {
+                Assert.IsTrue(array[i] == values[i]);
             }
-
-            Assert.AreEqual(redis.HashLength(cacheKey), hashListLength);
 
             var hash = redis.HashGetAll(cacheKey);
-            Assert.AreEqual(hash.Length, hashListLength);
-
-            for (int i = 0; i < hashListLength; i++) {
+            Assert.AreEqual(hash.Length, count);
+            for (int i = 0; i < count; i++) {
                 Assert.IsTrue(hash[i].Name == names[i]);
                 Assert.IsTrue(hash[i].Value == values[i]);
             }
 
-            for (int i = 0; i < 8; i++) {
-                var index = Math.Abs(Guid.NewGuid().GetHashCode() % names.Count);
-                var cacheItem = redis.HashGet(cacheKey, names[index]);
-                Assert.IsTrue((String)cacheItem == values[index]);
+            for (int i = 0; i < count; i++) {
+                var cacheItem = redis.HashGet(cacheKey, names[i]);
+                Assert.IsTrue((String)cacheItem == values[i]);
             }
 
-            for (int i = 0; i < 8; i++) {
-                if ((Guid.NewGuid().GetHashCode() & 1) == 0) {
-                    var index = Math.Abs(Guid.NewGuid().GetHashCode() % names.Count);
-                    var deleted = redis.HashDelete(cacheKey, names[index]);
-                    if (!deleted) {
-                        Debugger.Launch();
-                    }
-                    Assert.IsTrue(deleted);
-                    names.RemoveAt(index);
-                }
-                else {
-                    var deleted = redis.HashDelete(cacheKey, Guid.NewGuid().ToString());
-                    Assert.IsFalse(deleted);
-                }
+            for (int i = 0; i < count; i++) {
+                var deleted = redis.HashDelete(cacheKey, names[i]);
+                Assert.IsTrue(deleted);
             }
+
+            var exist = redis.KeyExists(cacheKey);
+            Assert.IsFalse(exist);
         }
 
         [TestMethod]
@@ -234,6 +221,34 @@ namespace Jusfr.Caching.Tests {
             Assert.IsTrue(redis.SortedSetLength(cacheKey) > 3);
             var removedByRank = redis.SortedSetRemoveRangeByRank(cacheKey, 0, 2);
             Assert.AreEqual(removedByRank, 3);
+        }
+
+        [TestMethod]
+        public void SortSertOrderTest() {
+            var cacheKey = Guid.NewGuid().ToString();
+            IRedis redis = new ServiceStackRedis();
+
+            var random = new Random();
+            var list = Enumerable.Repeat(0, 4).Select(r => random.Next(100)).ToList();
+            list.ForEach(i => redis.SortedSetAdd(cacheKey, i.ToString(), (double)i));
+
+            var list1 = redis.SortedSetRangeByRank(cacheKey, order: Order.Ascending);
+            Assert.AreEqual(list1.Length, list.Count);
+
+            var array1 = list.ToArray();
+            Array.Sort(array1);
+            for (int i = 0; i < list1.Length; i++) {
+                Assert.AreEqual(Convert.ToInt32( list1[i]), array1[i]);
+            }
+
+            var list2 = redis.SortedSetRangeByRank(cacheKey, order: Order.Descending);
+            Assert.AreEqual(list2.Length, list.Count);
+
+            var array2 = array1.Reverse().ToArray();
+            for (int i = 0; i < list2.Length; i++) {
+                Assert.AreEqual(Convert.ToInt32(list2[i]), array2[i]);
+            }
+
         }
 
 
@@ -318,23 +333,15 @@ namespace Jusfr.Caching.Tests {
             Parallel.Invoke(actions);
         }
 
-        //[TestMethod]
-        //public void RedisNativeClientTest4() {
-        //    var connectionString = ConfigurationManager.AppSettings.Get("cache:redis");
-        //    var key = "RedisParallelTest4";
-        //    var redisManager = new PooledRedisClientManager(connectionString);
-        //    //var redisManager = new PooledRedisClientManager(connectionString);
-        //    redisManager.ConnectTimeout = 100;
-        //    //var client = (IRedisNativeClient)redisManager.GetCacheClient(); //type cast error with PooledRedisClientManager
-        //    var client = (IRedisNativeClient)redisManager.GetClient(); //death lock
-        //    client.Del(key);
+        [TestMethod]
+        public void HMGet() {
+            var redis = new ServiceStackRedis();
+            var key = "/Work/0/100";
+            redis.HashSet(key, "Read", "2");
+            redis.HashSet(key, "Share", "3");
+            var hash = redis.HashGet(key, new RedisField[] { "Id", "Read", "Share" });
 
-        //    var actions = Enumerable.Repeat(1, 100).Select(i => new Action(() => {
-        //        client.Incr(key);
-        //    })).ToArray();
-
-        //    Parallel.Invoke(actions);
-        //}
+        }
 
         [TestMethod]
         public void RedisNativeClientTest4() {

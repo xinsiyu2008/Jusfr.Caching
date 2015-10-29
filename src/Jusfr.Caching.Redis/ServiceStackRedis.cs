@@ -9,18 +9,31 @@ using System.Threading.Tasks;
 
 namespace Jusfr.Caching.Redis {
     public class ServiceStackRedis : IRedis, IDisposable {
-        private static readonly IRedisClientsManager _redisFactory;
+        private static IRedisClientsManager _redisFactory;
 
         static ServiceStackRedis() {
+            Initialize();
+        }
+
+        private static void Initialize() {
             var connectionString = ConfigurationManager.AppSettings.Get("cache:redis");
-            if (String.IsNullOrWhiteSpace(connectionString)) {
-                throw new Exception("AppSettings \"redis\" missing");
+            if (!String.IsNullOrWhiteSpace(connectionString)) {
+                Initialize(connectionString);
             }
-            _redisFactory = new PooledRedisClientManager(connectionString) { ConnectTimeout = 100 };
+        }
+
+        public static void Initialize(params String[] hosts) {
+            if (_redisFactory != null) {
+                _redisFactory.Dispose();
+            }
+            _redisFactory = new PooledRedisClientManager(hosts) { ConnectTimeout = 100 };
         }
 
         //注意，用完需要dispose
         public IRedisNativeClient GetRedisClient() {
+            if (_redisFactory == null) {
+                throw new ArgumentException("Configuration \"cache:redis\" miss or method Initialize() not invoke");
+            }
             return (IRedisNativeClient)_redisFactory.GetClient();
         }
 
@@ -29,6 +42,8 @@ namespace Jusfr.Caching.Redis {
                 _redisFactory.Dispose();
             }
         }
+
+        //Key api
 
         public Boolean KeyExists(RedisField key) {
             using (var client = GetRedisClient()) {
@@ -54,6 +69,8 @@ namespace Jusfr.Caching.Redis {
             }
         }
 
+        //String api
+
         public RedisField StringGet(RedisField key) {
             using (var client = GetRedisClient()) {
                 return client.Get(key);
@@ -77,6 +94,8 @@ namespace Jusfr.Caching.Redis {
                 return client.IncrByFloat(key, value);
             }
         }
+
+        //Hash api
 
         public Int64 HashLength(RedisField key) {
             using (var client = GetRedisClient()) {
@@ -102,6 +121,30 @@ namespace Jusfr.Caching.Redis {
             }
         }
 
+        public RedisField[] HashGet(RedisField key, IList<RedisField> hashFields) {
+            using (var client = GetRedisClient()) {
+                var bytes = client.HMGet(key, hashFields.Select(h => (Byte[])h).ToArray());
+                if (bytes == null) {
+                    return null;
+                }
+                return bytes.Select(x => (RedisField)x).ToArray();
+            }
+        }
+
+        public RedisEntry[] HashGetAll(RedisField key) {
+            using (var client = GetRedisClient()) {
+                var bytes = client.HGetAll(key);
+                if (bytes == null) {
+                    return null;
+                }
+                var list = new RedisEntry[bytes.Length / 2];
+                for (int i = 0; i < list.Length; i++) {
+                    list[i] = new RedisEntry(bytes[2 * i], bytes[2 * i + 1]);
+                }
+                return list;
+            }
+        }
+
         public Int64 HashSet(RedisField key, RedisField hashField, RedisField value) {
             using (var client = GetRedisClient()) {
                 return client.HSet(key, hashField, value);
@@ -122,25 +165,13 @@ namespace Jusfr.Caching.Redis {
             }
         }
 
-        public RedisEntry[] HashGetAll(RedisField key) {
-            using (var client = GetRedisClient()) {
-                var hash = client.HGetAll(key);
-                if (hash.Length == 0) {
-                    return null;
-                }
-                var list = new RedisEntry[hash.Length / 2];
-                for (int i = 0; i < list.Length; i++) {
-                    list[i] = new RedisEntry(hash[2 * i], hash[2 * i + 1]);
-                }
-                return list;
-            }
-        }
-
         public Boolean HashDelete(RedisField key, RedisField hashField) {
             using (var client = GetRedisClient()) {
                 return client.HDel(key, hashField) == 1;
             }
         }
+
+        //List api
 
         public Int64 ListLength(RedisField key) {
             using (var client = GetRedisClient()) {
@@ -180,25 +211,79 @@ namespace Jusfr.Caching.Redis {
             }
         }
 
+        //SortedSet api
+
         public Int64 SortedSetLength(RedisField key) {
             using (var client = GetRedisClient()) {
                 return client.ZCard(key);
             }
         }
 
-        public RedisField[] SortedSetRangeByRank(RedisField key, Int32 startPosition = 0, Int32 stopPosition = -1) {
+        public Double? SortedSetScore(RedisField key, RedisField member) {
             using (var client = GetRedisClient()) {
-                return client.ZRange(key, startPosition, stopPosition)
-                    .Select(r => (RedisField)r)
+                var value = client.ZScore(key, member);
+                if (Double.IsNaN(value)) {
+                    return null;
+                }
+                return value;
+            }
+        }
+
+        public RedisField[] SortedSetRangeByRank(RedisField key, Int64 startPosition = 0, Int64 stopPosition = -1, Order order = Order.Ascending) {
+            using (var client = GetRedisClient()) {
+                Byte[][] bytes = order == Order.Ascending
+                    ? client.ZRange(key, (int)startPosition, (int)stopPosition)
+                    : client.ZRevRange(key, (int)startPosition, (int)stopPosition);
+                if (bytes == null) {
+                    return null;
+                }
+                return bytes.Select(r => (RedisField)r)
                     .ToArray();
             }
         }
 
-        public RedisField[] SortedSetRangeByScore(RedisField key, double startScore = double.NegativeInfinity, double stopScore = double.PositiveInfinity, Int32 skip = 0, Int32 take = -1) {
+        public RedisField[] SortedSetRangeByScore(RedisField key, Double startScore = Double.NegativeInfinity, Double stopScore = Double.PositiveInfinity, Int64 skip = 0, Int64 take = -1, Order order = Order.Ascending) {
             using (var client = GetRedisClient()) {
-                return client.ZRangeByScore(key, startScore, stopScore, skip, take)
-                    .Select(r => (RedisField)r)
+                Byte[][] bytes = order == Order.Ascending
+                    ? client.ZRangeByScore(key, startScore, stopScore, (int)skip, (int)take)
+                    : client.ZRevRangeByScore(key, startScore, stopScore, (int)skip, (int)take);
+                if (bytes == null) {
+                    return null;
+                }
+                return bytes.Select(r => (RedisField)r)
                     .ToArray();
+            }
+        }
+
+        public RedisEntry[] SortedSetRangeByRankWithScores(RedisField key, Int64 startPosition = 0, Int64 stopPosition = -1, Order order = Order.Ascending) {
+            using (var client = GetRedisClient()) {
+                Byte[][] bytes = order == Order.Ascending
+                    ? client.ZRangeWithScores(key, (int)startPosition, (int)stopPosition)
+                    : client.ZRevRangeWithScores(key, (int)startPosition, (int)stopPosition);
+                if (bytes == null) {
+                    return null;
+                }
+                var list = new RedisEntry[bytes.Length / 2];
+                for (int i = 0; i < list.Length; i++) {
+                    list[i] = new RedisEntry(bytes[2 * i], bytes[2 * i + 1]);
+                }
+                return list;
+            }
+        }
+
+        public RedisEntry[] SortedSetRangeByScoreWithScores(RedisField key, Double startScore = Double.NegativeInfinity, Double stopScore = Double.PositiveInfinity, Int64 skip = 0, Int64 take = -1, Order order = Order.Ascending) {
+            using (var client = GetRedisClient()) {
+                Byte[][] bytes = order == Order.Ascending
+                    ? client.ZRangeByScoreWithScores(key, startScore, stopScore, (int)skip, (int)take)
+                    : client.ZRevRangeByScoreWithScores(key, startScore, stopScore, (int)skip, (int)take);
+                if (bytes == null) {
+                    return null;
+                }
+                var list = new RedisEntry[bytes.Length / 2];
+                for (int i = 0; i < list.Length; i++) {
+                    list[i] = new RedisEntry(bytes[2 * i], bytes[2 * i + 1]);
+                }
+                return list;
             }
         }
 
@@ -212,7 +297,7 @@ namespace Jusfr.Caching.Redis {
             }
         }
 
-        public long SortedSetAdd(RedisField key, RedisField value, double score) {
+        public Int64 SortedSetAdd(RedisField key, RedisField value, Double score) {
             using (var client = GetRedisClient()) {
                 return client.ZAdd(key, score, value);
             }
@@ -224,15 +309,21 @@ namespace Jusfr.Caching.Redis {
             }
         }
 
-        public long SortedSetRemoveRangeByRank(RedisField key, Int32 startPosition, Int32 stopPosition) {
+        public Int64 SortedSetRemoveRangeByRank(RedisField key, Int64 startPosition, Int64 stopPosition) {
             using (var client = GetRedisClient()) {
-                return client.ZRemRangeByRank(key, startPosition, stopPosition);
+                return client.ZRemRangeByRank(key, (int)startPosition, (int)stopPosition);
             }
         }
 
-        public long SortedSetRemoveRangeByScore(RedisField key, double startScore, double stopScore) {
+        public Int64 SortedSetRemoveRangeByScore(RedisField key, Double startScore, Double stopScore) {
             using (var client = GetRedisClient()) {
                 return client.ZRemRangeByScore(key, startScore, stopScore);
+            }
+        }
+
+        public Double SortedSetIncrement(RedisField key, RedisField member, Double value) {
+            using (var client = GetRedisClient()) {
+                return client.ZIncrBy(key, value, member);
             }
         }
     }
