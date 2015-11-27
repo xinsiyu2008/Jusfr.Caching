@@ -1,7 +1,7 @@
 ﻿using System;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Jusfr.Caching.Redis;
 using System.Threading;
+using Jusfr.Caching.Redis;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Jusfr.Caching.Tests {
     [TestClass]

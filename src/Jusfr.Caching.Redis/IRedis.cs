@@ -12,6 +12,7 @@ namespace Jusfr.Caching.Redis {
         Boolean KeyDelete(RedisField key);
         Boolean KeyExpire(RedisField key, TimeSpan expiry);
         Boolean KeyExpire(RedisField key, DateTime expiry);
+        RedisField KeyRandom();
 
         RedisField StringGet(RedisField key);
         void StringSet(RedisField key, RedisField value);

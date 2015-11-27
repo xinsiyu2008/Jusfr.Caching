@@ -43,6 +43,15 @@ namespace Jusfr.Caching.Redis {
             }
         }
 
+        public TResult Excute<TResult>(Func<IRedisNativeClient, TResult> func) {
+            if (_redisFactory == null) {
+                throw new ArgumentException("Configuration \"cache:redis\" miss or method Initialize() not invoke");
+            }
+            using (var client = (IRedisNativeClient)_redisFactory.GetClient()) {
+                return func(client);
+            }
+        }
+
         //Key api
 
         public Boolean KeyExists(RedisField key) {
@@ -67,6 +76,10 @@ namespace Jusfr.Caching.Redis {
             using (var client = GetRedisClient()) {
                 return client.ExpireAt(key, expiry.ToUnixTime());
             }
+        }
+
+        public RedisField KeyRandom() {
+            return Excute(c => c.RandomKey());
         }
 
         //String api
