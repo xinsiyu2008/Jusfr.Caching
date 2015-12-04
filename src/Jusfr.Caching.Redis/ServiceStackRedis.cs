@@ -355,20 +355,20 @@ namespace Jusfr.Caching.Redis {
             }
         }
 
-        public void Lock(String key, Int32 timeout = 0) {
-            while (TryLock(key, timeout)) {
+        public void Lock(String key, Int32 timeoutSecond) {
+            while (!TryLock(key, timeoutSecond)) {
                 Thread.Sleep(DistributedSleepTime);
             }
         }
 
-        public Boolean TryLock(String key, Int32 timeout = 0) {
-            if (Excute(x => x.SetNX(key, _mutexBytes)) == 0) {
+        public Boolean TryLock(String key, Int32 timeoutSecond) {
+            if (Excute(x => x.SetNX(key, _mutexBytes) == 0L)) {
                 return false;
             }
-            if (timeout > 0) {
-                KeyExpire(key, TimeSpan.FromMilliseconds(timeout));
+            if (timeoutSecond > 0) {
+                KeyExpire(key, TimeSpan.FromMilliseconds(timeoutSecond));
             }
-            return false;
+            return true;
         }
 
         public void UnLock(String key) {
@@ -376,7 +376,7 @@ namespace Jusfr.Caching.Redis {
         }
 
         public IDisposable Lock(String key) {
-            while (TryLock(key, DistributedMaxTime)) {
+            while (!TryLock(key, DistributedMaxTime)) {
                 Thread.Sleep(DistributedSleepTime);
             }
             return new RedisLockReleaser(this, key);

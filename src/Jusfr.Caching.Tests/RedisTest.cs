@@ -380,25 +380,25 @@ namespace Jusfr.Caching.Tests {
             var key = "DistributedLock1";
             {
                 
-                var total = 0;
+                var list = new List<int>();
                 var except = new Random().Next(1000, 2000);
                 Parallel.For(0, except, i => {
                     using (redis.Lock(key)) {
-                        total++;
+                        list.Add(i);
                     }
                 });
-                Assert.AreEqual(total, except);
+                Assert.AreEqual(list.Count, except);
             }
 
             {
-                var total = 0;
+                var list = new List<int>();
                 var except = new Random().Next(1000, 2000);
                 Parallel.For(0, except, i => {
                     redis.Lock(key);
-                    total++;
+                    list.Add(i);
                     redis.UnLock(key);
                 });
-                Assert.AreEqual(total, except);
+                Assert.AreEqual(list.Count, except);
             }
 
 

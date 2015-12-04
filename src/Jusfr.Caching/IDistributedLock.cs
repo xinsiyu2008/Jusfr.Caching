@@ -8,8 +8,8 @@ namespace Jusfr.Caching {
 
     public interface IDistributedLock {
         IDisposable Lock(String key);
-        void Lock(String key, Int32 timeoutSecond = 0);
-        Boolean TryLock(String key, Int32 timeoutSecond = 0);
+        void Lock(String key, Int32 timeoutSecond);
+        Boolean TryLock(String key, Int32 timeoutSecond );
         void UnLock(String key);
     }
 }
