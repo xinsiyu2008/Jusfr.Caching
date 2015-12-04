@@ -47,6 +47,7 @@
     <Compile Include="HttpRuntimeCacheProvider.cs" />
     <Compile Include="HttpRuntimeCacheProviderExtensions.cs" />
     <Compile Include="ICacheProvider.cs" />
+    <Compile Include="IDistributedLock.cs" />
     <Compile Include="IHttpRuntimeCacheProvider.cs" />
     <Compile Include="IRegion.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

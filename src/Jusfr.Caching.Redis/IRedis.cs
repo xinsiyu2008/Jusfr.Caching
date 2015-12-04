@@ -7,18 +7,22 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Jusfr.Caching.Redis {
-    public interface IRedis {
+    
+    public interface IRedis : IDistributedLock {
+        //Key
         Boolean KeyExists(RedisField key);
         Boolean KeyDelete(RedisField key);
         Boolean KeyExpire(RedisField key, TimeSpan expiry);
         Boolean KeyExpire(RedisField key, DateTime expiry);
         RedisField KeyRandom();
 
+        //String
         RedisField StringGet(RedisField key);
         void StringSet(RedisField key, RedisField value);
         Int64 StringIncrement(RedisField key, Int32 value = 1);
         Double StringIncrement(RedisField key, Double value);
 
+        //Hash
         RedisField HashGet(RedisField key, RedisField hashField);
         RedisField[] HashGet(RedisField key, IList<RedisField> hashFields);
         RedisEntry[] HashGetAll(RedisField key);
@@ -30,6 +34,7 @@ namespace Jusfr.Caching.Redis {
         void HashSet(RedisField key, IList<RedisEntry> pairs);
         Boolean HashDelete(RedisField key, RedisField hashField);
 
+        //List
         Int64 ListLength(RedisField key);
         RedisField[] ListRange(RedisField key, Int32 startingFrom, Int32 endingAt);
         Int64 ListLeftPush(RedisField key, RedisField value);
@@ -37,6 +42,7 @@ namespace Jusfr.Caching.Redis {
         Int64 ListRightPush(RedisField key, RedisField value);
         RedisField ListRightPop(RedisField key);
 
+        //ZSet
         Int64 SortedSetLength(RedisField key);
         Double? SortedSetScore(RedisField key, RedisField member);
         RedisField[] SortedSetRangeByRank(RedisField key, Int64 startPosition = 0, Int64 stopPosition = -1, Order order = Order.Ascending);

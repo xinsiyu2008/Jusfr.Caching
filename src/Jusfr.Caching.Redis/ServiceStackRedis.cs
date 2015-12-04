@@ -6,12 +6,18 @@ using System.Configuration;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace Jusfr.Caching.Redis {
-    public class ServiceStackRedis : IRedis, IDisposable {
+    public class ServiceStackRedis : IDistributedLock, IRedis, IDisposable {
         private static IRedisClientsManager _redisFactory;
+        private static Byte[] _mutexBytes;
+
+        public const Int32 DistributedSleepTime = 5;
+        public const Int32 DistributedMaxTime = 60000;
 
         static ServiceStackRedis() {
+            _mutexBytes = Encoding.UTF8.GetBytes("Lock");
             Initialize();
         }
 
@@ -40,6 +46,15 @@ namespace Jusfr.Caching.Redis {
         public void Dispose() {
             if (_redisFactory != null) {
                 _redisFactory.Dispose();
+            }
+        }
+
+        public void Excute(Action<IRedisNativeClient> action) {
+            if (_redisFactory == null) {
+                throw new ArgumentException("Configuration \"cache:redis\" miss or method Initialize() not invoke");
+            }
+            using (var client = (IRedisNativeClient)_redisFactory.GetClient()) {
+                action(client);
             }
         }
 
@@ -337,6 +352,48 @@ namespace Jusfr.Caching.Redis {
         public Double SortedSetIncrement(RedisField key, RedisField member, Double value) {
             using (var client = GetRedisClient()) {
                 return client.ZIncrBy(key, value, member);
+            }
+        }
+
+        public void Lock(String key, Int32 timeout = 0) {
+            while (TryLock(key, timeout)) {
+                Thread.Sleep(DistributedSleepTime);
+            }
+        }
+
+        public Boolean TryLock(String key, Int32 timeout = 0) {
+            if (Excute(x => x.SetNX(key, _mutexBytes)) == 0) {
+                return false;
+            }
+            if (timeout > 0) {
+                KeyExpire(key, TimeSpan.FromMilliseconds(timeout));
+            }
+            return false;
+        }
+
+        public void UnLock(String key) {
+            KeyDelete(key);
+        }
+
+        public IDisposable Lock(String key) {
+            while (TryLock(key, DistributedMaxTime)) {
+                Thread.Sleep(DistributedSleepTime);
+            }
+            return new RedisLockReleaser(this, key);
+        }
+
+        private struct RedisLockReleaser : IDisposable {
+            private IRedis _redis;
+            private String _key;
+
+
+            public RedisLockReleaser(IRedis redis, String key) {
+                _redis = redis;
+                _key = key;
+            }
+
+            public void Dispose() {
+                _redis.UnLock(_key);
             }
         }
     }
