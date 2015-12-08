@@ -3,6 +3,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Jusfr.Caching;
 using Jusfr.Caching.Memcached;
 using System.Threading;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace Jusfr.Caching.Tests {
     [TestClass]
@@ -129,6 +132,47 @@ namespace Jusfr.Caching.Tests {
             exist = cacheProvider.TryGet<Guid>(key, out val2);
             Assert.IsFalse(exist);
             Assert.AreEqual(val2, Guid.Empty);
+        }
+
+        [TestMethod]
+        public void DistributedLock() {
+            IDistributedLock memcached = new MemcachedCacheProvider();
+            var key = "DistributedLock1";
+            
+            {
+                var list = new List<int>();
+                var except = new Random().Next(1000, 2000);
+                var stopwatch = Stopwatch.StartNew();
+
+                Parallel.For(0, except, i => {
+                    using (memcached.Lock(key)) {
+                        list.Add(i);
+                    }
+                });
+                stopwatch.Stop();
+                Console.WriteLine("Handle {0} times cost {1}, {2:f2} per sec.",
+                    except, stopwatch.Elapsed.TotalSeconds, except / stopwatch.Elapsed.TotalSeconds);
+
+                Assert.AreEqual(list.Count, except);
+            }
+
+            {
+                var list = new List<int>();
+                var except = new Random().Next(1000, 2000);
+                var stopwatch = Stopwatch.StartNew();
+
+                Parallel.For(0, except, i => {
+                    memcached.Lock(key);
+                    list.Add(i);
+                    memcached.UnLock(key);
+                });
+
+                stopwatch.Stop();
+                Console.WriteLine("Handle {0} times cost {1}, {2:f2} per sec.",
+                    except, stopwatch.Elapsed.TotalSeconds, except / stopwatch.Elapsed.TotalSeconds);
+
+                Assert.AreEqual(list.Count, except);
+            }
         }
     }
 

@@ -12,10 +12,15 @@ using System.Web.Caching;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
+using System.Threading;
 
 namespace Jusfr.Caching.Memcached {
-    public class MemcachedCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion {
+
+    public class MemcachedCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion, IDistributedLock {
         private static readonly MemcachedClient _client = new MemcachedClient("enyim.com/memcached");
+
+        public const Int32 DistributedSleepTime = 5;
+        public const Int32 DistributedMaxTime = 60000;
         public String Region { get; private set; }
 
         public MemcachedCacheProvider() {
@@ -117,6 +122,42 @@ namespace Jusfr.Caching.Memcached {
 
         public override void Expire(String key) {
             _client.Remove(BuildCacheKey(key));  // Could check result
+        }
+
+        public IDisposable Lock(String key) {
+            while (!TryLock(key, DistributedMaxTime)) {
+                Thread.Sleep(DistributedSleepTime);
+            }
+            return new MemcachedLockReleaser(_client, key);
+        }
+
+        public void Lock(String key, Int32 timeoutSecond) {
+            while (!TryLock(key, timeoutSecond)) {
+                Thread.Sleep(DistributedSleepTime);
+            }
+        }
+
+        public Boolean TryLock(String key, Int32 timeoutSecond) {
+            var result = _client.ExecuteStore(StoreMode.Add, BuildCacheKey(key), 1);
+            return result.Success;
+        }
+
+        public void UnLock(String key) {
+            Expire(BuildCacheKey(key));
+        }
+
+        private struct MemcachedLockReleaser : IDisposable {
+            private MemcachedClient _client;
+            private String _key;
+
+            public MemcachedLockReleaser(MemcachedClient client, String key) {
+                _client = client;
+                _key = key;
+            }
+
+            public void Dispose() {
+                _client.ExecuteRemove(_key);
+            }
         }
 
         [Serializable]
