@@ -138,7 +138,7 @@ namespace Jusfr.Caching.Memcached {
         }
 
         public Boolean TryLock(String key, Int32 timeoutSecond) {
-            var result = _client.ExecuteStore(StoreMode.Add, BuildCacheKey(key), 1);
+            var result = _client.ExecuteStore(StoreMode.Add, BuildCacheKey(key), 1, TimeSpan.FromSeconds(timeoutSecond));
             return result.Success;
         }
 
