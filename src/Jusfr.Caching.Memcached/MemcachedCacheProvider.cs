@@ -1,26 +1,16 @@
-﻿using Enyim.Caching;
-using Enyim.Caching.Configuration;
+﻿using System;
+using System.Threading;
+using Enyim.Caching;
 using Enyim.Caching.Memcached;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Text;
-using System.Threading.Tasks;
-using System.Collections.Concurrent;
-using System.Web.Caching;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
-using System.Threading;
 
 namespace Jusfr.Caching.Memcached {
 
     public class MemcachedCacheProvider : CacheProvider, IHttpRuntimeCacheProvider, IRegion, IDistributedLock {
         private static readonly MemcachedClient _client = new MemcachedClient("enyim.com/memcached");
-
-        public const Int32 DistributedSleepTime = 5;
-        public const Int32 DistributedMaxTime = 60000;
+        
         public String Region { get; private set; }
 
         public MemcachedCacheProvider() {
@@ -124,21 +114,21 @@ namespace Jusfr.Caching.Memcached {
             _client.Remove(BuildCacheKey(key));  // Could check result
         }
 
-        public IDisposable Lock(String key) {
-            while (!TryLock(key, DistributedMaxTime)) {
-                Thread.Sleep(DistributedSleepTime);
+        public IDisposable ReleasableLock(String key, Int32 expire = DistributedLockTime.DisposeMillisecond) {
+            while (!TryLock(key, expire)) {
+                Thread.Sleep(DistributedLockTime.IntervalMillisecond);
             }
             return new MemcachedLockReleaser(_client, key);
         }
 
-        public void Lock(String key, Int32 timeoutSecond) {
-            while (!TryLock(key, timeoutSecond)) {
-                Thread.Sleep(DistributedSleepTime);
+        public void Lock(String key, Int32 expire) {
+            while (!TryLock(key, expire)) {
+                Thread.Sleep(DistributedLockTime.IntervalMillisecond);
             }
         }
 
-        public Boolean TryLock(String key, Int32 timeoutSecond) {
-            var result = _client.ExecuteStore(StoreMode.Add, BuildCacheKey(key), 1, TimeSpan.FromSeconds(timeoutSecond));
+        public Boolean TryLock(String key, Int32 expire) {
+            var result = _client.ExecuteStore(StoreMode.Add, BuildCacheKey(key), 1, TimeSpan.FromMilliseconds(expire));
             return result.Success;
         }
 

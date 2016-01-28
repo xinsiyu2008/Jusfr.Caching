@@ -63,9 +63,36 @@ namespace Jusfr.Caching.Tests {
         }
 
         [TestMethod]
+        public void KeyRename() {
+            IRedis redis = ServiceStackRedis.Default;
+            var key = Guid.NewGuid().ToString();
+            var value = Guid.NewGuid().ToString();
+
+            redis.StringSet(key, value);
+            Assert.IsTrue(redis.KeyExists(key));
+
+            var key2= Guid.NewGuid().ToString();
+            var renamed1 = redis.KeyRename(key, key2);
+            Assert.IsTrue(renamed1);
+
+            Assert.IsFalse(redis.KeyExists(key));
+            Assert.IsTrue(redis.KeyExists(key2));
+
+            redis.KeyDelete(key2);
+            try {
+                var renamed12 = redis.KeyRename(key, key2);
+                Assert.Fail();
+
+            }
+            catch(Exception ex) {
+                Assert.IsTrue(ex is RedisException);
+            }
+        }
+
+        [TestMethod]
         public void StringTest() {
             var cacheKey = Guid.NewGuid().ToString();
-            IRedis redis = new ServiceStackRedis();
+            IRedis redis = ServiceStackRedis.Default;
 
             //StringGet
             var cacheField = redis.StringGet(cacheKey);
@@ -88,7 +115,7 @@ namespace Jusfr.Caching.Tests {
         [TestMethod]
         public void ListTest() {
             var cacheKey = Guid.NewGuid().ToString();
-            IRedis redis = new ServiceStackRedis();
+            IRedis redis = ServiceStackRedis.Default;
             var linkList = new LinkedList<String>();
             const Int32 listLength = 4;
 
@@ -137,9 +164,48 @@ namespace Jusfr.Caching.Tests {
         }
 
         [TestMethod]
+        public void ListMultiTest() {
+            var cacheKey = Guid.NewGuid().ToString();
+            IRedis redis = ServiceStackRedis.Default;
+            var linkList = new List<String>();
+            var listLength = Math.Abs(Guid.NewGuid().GetHashCode() % 5) + 5;
+
+            redis.KeyDelete(cacheKey);
+            linkList = Enumerable.Repeat(0, listLength)
+                .Select(x => Guid.NewGuid().ToString())
+                .ToList();
+
+            {
+                redis.ListRightPush(cacheKey, linkList.Select(x => (RedisField)x).ToArray());
+                Assert.AreEqual(linkList.Count, redis.ListLength(cacheKey));
+
+                for (int i = 0; i < listLength; i++) {
+                    var cacheItem = redis.ListLeftPop(cacheKey);
+                    Assert.AreEqual(linkList[i], (String)cacheItem);
+                }
+
+                var cacheEists = redis.KeyExists(cacheKey);
+                Assert.IsFalse(cacheEists);
+            }
+
+            {
+                redis.ListLeftPush(cacheKey, linkList.Select(x => (RedisField)x).ToArray());
+                Assert.AreEqual(linkList.Count, redis.ListLength(cacheKey));
+
+                for (int i = 0; i < listLength; i++) {
+                    var cacheItem = redis.ListRightPop(cacheKey);
+                    Assert.AreEqual(linkList[i], (String)cacheItem);
+                }
+
+                var cacheEists = redis.KeyExists(cacheKey);
+                Assert.IsFalse(cacheEists);
+            }
+        }
+
+        [TestMethod]
         public void HashTest() {
             var cacheKey = Guid.NewGuid().ToString();
-            IRedis redis = new ServiceStackRedis();
+            IRedis redis = ServiceStackRedis.Default;
 
             var count = 10;
             var names = new String[count].ToList();
@@ -185,7 +251,7 @@ namespace Jusfr.Caching.Tests {
         [TestMethod]
         public void SortedSetRange() {
             var cacheKey = Guid.NewGuid().ToString();
-            IRedis redis = new ServiceStackRedis();
+            IRedis redis = ServiceStackRedis.Default;
 
             var random = new Random();
             var list = Enumerable.Repeat(0, 20).Select(r => random.Next(100)).Distinct().ToList();
@@ -213,7 +279,7 @@ namespace Jusfr.Caching.Tests {
                 var value = list[index];
                 list.RemoveAt(index);
                 var removed = redis.SortedSetRemove(cacheKey, value.ToString());
-                Assert.IsTrue(removed);
+                Assert.IsTrue(removed > 0);
                 var len = redis.SortedSetLength(cacheKey);
                 Assert.AreEqual(len, list.Count);
             }
@@ -226,7 +292,7 @@ namespace Jusfr.Caching.Tests {
         [TestMethod]
         public void SortedSet_Ordered() {
             var cacheKey = Guid.NewGuid().ToString();
-            IRedis redis = new ServiceStackRedis();
+            IRedis redis = ServiceStackRedis.Default;
 
             var random = new Random();
             var list = Enumerable.Repeat(0, 4).Select(r => random.Next(100)).ToList();
@@ -238,7 +304,7 @@ namespace Jusfr.Caching.Tests {
             var array1 = list.ToArray();
             Array.Sort(array1);
             for (int i = 0; i < list1.Length; i++) {
-                Assert.AreEqual(Convert.ToInt32(list1[i]), array1[i]);
+                Assert.AreEqual((Int32)list1[i], array1[i]);
             }
 
             var list2 = redis.SortedSetRangeByRank(cacheKey, order: Order.Descending);
@@ -246,7 +312,7 @@ namespace Jusfr.Caching.Tests {
 
             var array2 = array1.Reverse().ToArray();
             for (int i = 0; i < list2.Length; i++) {
-                Assert.AreEqual(Convert.ToInt32(list2[i]), array2[i]);
+                Assert.AreEqual((Int32)list2[i], array2[i]);
             }
 
         }
@@ -256,7 +322,7 @@ namespace Jusfr.Caching.Tests {
         public void StringIncrement() {
             //StackExchange.Redis.IDatabase d;
             var key = "RedisParallelTest";
-            var redis = new ServiceStackRedis();
+            var redis = ServiceStackRedis.Default;
             redis.KeyDelete(key);
 
             Action action = () => Console.WriteLine(redis.StringIncrement(key));
@@ -335,7 +401,7 @@ namespace Jusfr.Caching.Tests {
 
         [TestMethod]
         public void HMGet() {
-            var redis = new ServiceStackRedis();
+            var redis = ServiceStackRedis.Default;
             var key = "/Work/0/100";
             redis.HashSet(key, "Read", "2");
             redis.HashSet(key, "Share", "3");
@@ -345,7 +411,7 @@ namespace Jusfr.Caching.Tests {
 
         [TestMethod]
         public void RedisNativeClientTest4() {
-            var redis = new ServiceStackRedis();
+            var redis = ServiceStackRedis.Default;
             var key = "RedisParallelTest4";
             redis.KeyDelete(key);
             var actions = Enumerable.Repeat(1, 100).Select(i => new Action(() => redis.StringIncrement(key))).ToArray();
@@ -354,7 +420,7 @@ namespace Jusfr.Caching.Tests {
 
         [TestMethod]
         public void HashIncrement() {
-            var redis = new ServiceStackRedis();
+            var redis = ServiceStackRedis.Default;
             var key = "RedisParallelTest5";
             var field = "HashIncrement";
             var repeat = 10000;
@@ -376,16 +442,16 @@ namespace Jusfr.Caching.Tests {
 
         [TestMethod]
         public void DistributedLock() {
-            var redis = new ServiceStackRedis();
+            var redis = ServiceStackRedis.Default;
             var key = "DistributedLock1";
             {
-                
+
                 var list = new List<int>();
                 var except = new Random().Next(1000, 2000);
                 var stopwatch = Stopwatch.StartNew();
 
                 Parallel.For(0, except, i => {
-                    using (redis.Lock(key)) {
+                    using (redis.ReleasableLock(key)) {
                         list.Add(i);
                     }
                 });
@@ -403,7 +469,7 @@ namespace Jusfr.Caching.Tests {
                 var stopwatch = Stopwatch.StartNew();
 
                 Parallel.For(0, except, i => {
-                    redis.Lock(key);
+                    redis.Lock(key, DistributedLockTime.IntervalMillisecond);
                     list.Add(i);
                     redis.UnLock(key);
                 });
@@ -413,7 +479,7 @@ namespace Jusfr.Caching.Tests {
                     except, stopwatch.Elapsed.TotalSeconds, except / stopwatch.Elapsed.TotalSeconds);
 
                 Assert.AreEqual(list.Count, except);
-            }            
+            }
         }
     }
 }

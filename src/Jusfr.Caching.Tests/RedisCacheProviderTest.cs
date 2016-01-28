@@ -11,7 +11,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
             
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(new ServiceStackRedis());
+            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(ServiceStackRedis.Default);
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -35,7 +35,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(new ServiceStackRedis());
+            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(ServiceStackRedis.Default);
             var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
             Assert.AreEqual(result, val);
 
@@ -53,7 +53,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(new ServiceStackRedis());
+            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(ServiceStackRedis.Default);
 
             //DateTime.Now
             Guid result;
@@ -76,7 +76,7 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(new ServiceStackRedis());
+            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(ServiceStackRedis.Default);
             var t1 = DateTime.Now.AddSeconds(8D);
             var t2 = DateTime.UtcNow.AddSeconds(8D);
             Assert.AreEqual(t1.ToTimestamp(), t2.ToTimestamp());
@@ -116,18 +116,37 @@ namespace Jusfr.Caching.Tests {
             var key = Guid.NewGuid().ToString("n");
             var val = Guid.NewGuid();
 
-            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(new ServiceStackRedis());
-            var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
-            Assert.AreEqual(result, val);
+            IRedis redis = ServiceStackRedis.Default;
+            IHttpRuntimeCacheProvider cacheProvider = new RedisCacheProvider(redis);
 
-            var exist = cacheProvider.TryGet<Guid>(key, out val);
-            Assert.IsTrue(exist);
+            {
+                var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
+                Assert.AreEqual(result, val);
 
-            cacheProvider.Expire(key);
-            Guid val2;
-            exist = cacheProvider.TryGet<Guid>(key, out val2);
-            Assert.IsFalse(exist);
-            Assert.AreEqual(val2, Guid.Empty);
+                var exist = cacheProvider.TryGet<Guid>(key, out val);
+                Assert.IsTrue(exist);
+
+                cacheProvider.Expire(key);
+                Guid val2;
+                exist = cacheProvider.TryGet<Guid>(key, out val2);
+                Assert.IsFalse(exist);
+                Assert.AreEqual(val2, Guid.Empty);
+            }
+
+
+            {
+                var result = cacheProvider.GetOrCreate<Guid>(key, () => val);
+                Assert.AreEqual(result, val);
+
+                var exist = cacheProvider.TryGet<Guid>(key, out val);
+                Assert.IsTrue(exist);
+
+                cacheProvider.Expire(key);
+                Guid val2;
+                exist = cacheProvider.TryGet<Guid>(key, out val2);
+                Assert.IsFalse(exist);
+                Assert.AreEqual(val2, Guid.Empty);
+            }
         }
     }
 }

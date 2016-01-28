@@ -145,7 +145,7 @@ namespace Jusfr.Caching.Tests {
                 var stopwatch = Stopwatch.StartNew();
 
                 Parallel.For(0, except, i => {
-                    using (memcached.Lock(key)) {
+                    using (memcached.ReleasableLock(key)) {
                         list.Add(i);
                     }
                 });
@@ -162,7 +162,7 @@ namespace Jusfr.Caching.Tests {
                 var stopwatch = Stopwatch.StartNew();
 
                 Parallel.For(0, except, i => {
-                    memcached.Lock(key);
+                    memcached.ReleasableLock(key);
                     list.Add(i);
                     memcached.UnLock(key);
                 });

@@ -46,6 +46,14 @@ namespace Jusfr.Caching.Redis {
             return new RedisField() { key2 = key };
         }
 
+        public static implicit operator RedisField(Int32 key) {
+            return new RedisField() { key1 = key.ToString() };
+        }
+
+        public static implicit operator RedisField(Int64 key) {
+            return new RedisField() { key1 = key.ToString() };
+        }
+
         public static implicit operator String(RedisField key) {
             if (key.key1 != null) {
                 return key.key1;
@@ -55,6 +63,14 @@ namespace Jusfr.Caching.Redis {
                 return key.key1;
             }
             return null;
+        }
+
+        public static implicit operator Int64(RedisField key) {
+            return Int64.Parse((String)key);
+        }
+
+        public static implicit operator Int32(RedisField key) {
+            return checked(Int32.Parse((String)key));
         }
 
         public static implicit operator byte[] (RedisField key) {

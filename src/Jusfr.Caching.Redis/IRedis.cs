@@ -15,6 +15,7 @@ namespace Jusfr.Caching.Redis {
         Boolean KeyExpire(RedisField key, TimeSpan expiry);
         Boolean KeyExpire(RedisField key, DateTime expiry);
         RedisField KeyRandom();
+        Boolean KeyRename(RedisField key, RedisField newKey);
 
         //String
         RedisField StringGet(RedisField key);
@@ -38,8 +39,10 @@ namespace Jusfr.Caching.Redis {
         Int64 ListLength(RedisField key);
         RedisField[] ListRange(RedisField key, Int32 startingFrom, Int32 endingAt);
         Int64 ListLeftPush(RedisField key, RedisField value);
+        Int64 ListLeftPush(RedisField key, IList<RedisField> values);
         RedisField ListLeftPop(RedisField key);
         Int64 ListRightPush(RedisField key, RedisField value);
+        Int64 ListRightPush(RedisField key, IList<RedisField> values);
         RedisField ListRightPop(RedisField key);
 
         //ZSet
@@ -51,7 +54,7 @@ namespace Jusfr.Caching.Redis {
         RedisEntry[] SortedSetRangeByScoreWithScores(RedisField key, Double startScore = Double.NegativeInfinity, Double stopScore = Double.PositiveInfinity, Int64 skip = 0, Int64 take = -1, Order order = Order.Ascending);
         Int64? SortedSetRank(RedisField key, RedisField member);
         Int64 SortedSetAdd(RedisField key, RedisField value, Double score);
-        Boolean SortedSetRemove(RedisField key, RedisField member);
+        Int64 SortedSetRemove(RedisField key, RedisField member);
         Int64 SortedSetRemoveRangeByRank(RedisField key, Int64 startPosition, Int64 stopPosition);
         Int64 SortedSetRemoveRangeByScore(RedisField key, Double startScore, Double stopScore);
         Double SortedSetIncrement(RedisField key, RedisField member, Double value);
