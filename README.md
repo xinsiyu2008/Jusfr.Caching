@@ -1,4 +1,5 @@
-# Jusfr.Caching
+# 2016/4/1
+作为 7cm 的项目移动到 [Chuye.Caching](https://github.com/jusfr/Chuye.Caching.git)，命名空间不再沿用。
 
 ## 2015/9/9 
 Jusfr.Caching.Redis 作了大量改进，目前已经投入生产环境
